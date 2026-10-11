@@ -34,7 +34,7 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <WildDexProvider>
-      <StatusBar style="light" backgroundColor={Colors.deepForest} />
+      <StatusBar style="light" />
       <RootNavigator />
     </WildDexProvider>
   );

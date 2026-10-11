@@ -23,6 +23,7 @@ export default function SettingsScreen() {
   const resetLocalData = async () => {
     setResetting(true);
     try {
+      // SDK 57 pins async-storage v2, which uses the multiRemove API
       await AsyncStorage.multiRemove([
         'wilddex.selectedRegionId',
         'wilddex.discoveries',
