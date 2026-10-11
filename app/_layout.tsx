@@ -1,4 +1,4 @@
-import { Colors } from '@/constants/theme';
+﻿import { Colors } from '@/constants/theme';
 import { WildDexProvider, useWildDex } from '@/hooks/useWildDexState';
 import { Redirect, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,7 +6,7 @@ import LoadingState from '@/components/LoadingState';
 
 function RootNavigator() {
   const { hydrated, onboarded } = useWildDex();
-  if (!hydrated) return <LoadingState message="Preparing your field guide…" />;
+  if (!hydrated) return <LoadingState message="Preparing your field guideâ€¦" />;
   // Phase-1 onboarding gate: first launch shows the welcome flow.
   if (!onboarded) return <Redirect href="/(onboarding)" />;
   return (
@@ -34,8 +34,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <WildDexProvider>
-      <StatusBar style="light" backgroundColor={Colors.deepForest} />
+      <StatusBar style="light" />
       <RootNavigator />
     </WildDexProvider>
   );
 }
+

@@ -23,11 +23,13 @@ export default function SettingsScreen() {
   const resetLocalData = async () => {
     setResetting(true);
     try {
-      await AsyncStorage.multiRemove([
-        'wilddex.selectedRegionId',
-        'wilddex.discoveries',
-        'wilddex.onboarded',
-      ]);
+      await Promise.all(
+  [
+    'wilddex.selectedRegionId',
+    'wilddex.discoveries',
+    'wilddex.onboarded',
+  ].map((key) => AsyncStorage.removeItem(key))
+);
     } finally {
       setResetting(false);
       // Restart flow by going back to Home; on next cold start onboarding shows again.
