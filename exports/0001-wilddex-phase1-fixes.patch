@@ -1,0 +1,270 @@
+From b18215b284bbd29ca5e930749466044fb40bdedb Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Sun, 11 Oct 2026 14:31:19 +0000
+Subject: [PATCH] fix: apply Phase 1 audit fixes (hook rename, StatusBar,
+ missing deps, version alignment)
+
+---
+ app/_layout.tsx                               |   2 +-
+ app/settings.tsx                              |   1 +
+ ...useWildDexState.ts => useWildDexState.tsx} |   0
+ package-lock.json                             | 103 ++++++++++++++----
+ package.json                                  |   9 +-
+ 5 files changed, 90 insertions(+), 25 deletions(-)
+ rename hooks/{useWildDexState.ts => useWildDexState.tsx} (100%)
+
+diff --git a/app/_layout.tsx b/app/_layout.tsx
+index bf7969a..9707871 100644
+--- a/app/_layout.tsx
++++ b/app/_layout.tsx
+@@ -34,7 +34,7 @@ function RootNavigator() {
+ export default function RootLayout() {
+   return (
+     <WildDexProvider>
+-      <StatusBar style="light" backgroundColor={Colors.deepForest} />
++      <StatusBar style="light" />
+       <RootNavigator />
+     </WildDexProvider>
+   );
+diff --git a/app/settings.tsx b/app/settings.tsx
+index 50e907a..f270292 100644
+--- a/app/settings.tsx
++++ b/app/settings.tsx
+@@ -23,6 +23,7 @@ export default function SettingsScreen() {
+   const resetLocalData = async () => {
+     setResetting(true);
+     try {
++      // SDK 57 pins async-storage v2, which uses the multiRemove API
+       await AsyncStorage.multiRemove([
+         'wilddex.selectedRegionId',
+         'wilddex.discoveries',
+diff --git a/hooks/useWildDexState.ts b/hooks/useWildDexState.tsx
+similarity index 100%
+rename from hooks/useWildDexState.ts
+rename to hooks/useWildDexState.tsx
+diff --git a/package-lock.json b/package-lock.json
+index 060e090..342d05b 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -9,20 +9,23 @@
+       "version": "0.1.0",
+       "dependencies": {
+         "@expo/metro-runtime": "~57.0.16",
+-        "@react-native-async-storage/async-storage": "^3.1.1",
++        "@expo/vector-icons": "^15.0.2",
++        "@react-native-async-storage/async-storage": "2.2.0",
+         "expo": "~57.0.27",
+         "expo-constants": "~57.0.21",
+         "expo-font": "~57.0.4",
+         "expo-image": "^57.0.5",
++        "expo-image-picker": "~57.0.20",
+         "expo-linking": "~57.0.12",
++        "expo-location": "~57.0.20",
+         "expo-router": "~57.0.25",
+         "expo-status-bar": "~57.0.1",
+         "react": "19.2.3",
+         "react-dom": "19.2.3",
+         "react-native": "0.86.3",
+         "react-native-gesture-handler": "~2.32.0",
+-        "react-native-safe-area-context": "~5.10.1",
+-        "react-native-screens": "~4.29.0",
++        "react-native-safe-area-context": "~5.7.0",
++        "react-native-screens": "~4.26.0",
+         "react-native-web": "^0.21.0"
+       },
+       "devDependencies": {
+@@ -1645,6 +1648,17 @@
+         }
+       }
+     },
++    "node_modules/@expo/vector-icons": {
++      "version": "15.1.1",
++      "resolved": "https://registry.npmjs.org/@expo/vector-icons/-/vector-icons-15.1.1.tgz",
++      "integrity": "sha512-Iu2VkcoI5vygbtYngm7jb4ifxElNVXQYdDrYkT7UCEIiKLeWnQY0wf2ZhHZ+Wro6Sc5TaumpKUOqDRpLi5rkvw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo-font": ">=14.0.4",
++        "react": "*",
++        "react-native": "*"
++      }
++    },
+     "node_modules/@expo/xcpretty": {
+       "version": "4.4.6",
+       "resolved": "https://registry.npmjs.org/@expo/xcpretty/-/xcpretty-4.4.6.tgz",
+@@ -1938,16 +1952,15 @@
+       }
+     },
+     "node_modules/@react-native-async-storage/async-storage": {
+-      "version": "3.1.1",
+-      "resolved": "https://registry.npmjs.org/@react-native-async-storage/async-storage/-/async-storage-3.1.1.tgz",
+-      "integrity": "sha512-z+PnLz1n6ECKhgoHZHkfc+dijXZEyZnNFSajbtE0NEbsJhmX8x9GlOeiMQIKX2E4DUqPSgfIh4FYBv1M49KgPQ==",
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/@react-native-async-storage/async-storage/-/async-storage-2.2.0.tgz",
++      "integrity": "sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw==",
+       "license": "MIT",
+       "dependencies": {
+-        "idb": "8.0.3"
++        "merge-options": "^3.0.4"
+       },
+       "peerDependencies": {
+-        "react": "*",
+-        "react-native": "*"
++        "react-native": "^0.0.0-0 || >=0.65 <1.0"
+       }
+     },
+     "node_modules/@react-native-masked-view/masked-view": {
+@@ -3481,6 +3494,27 @@
+         }
+       }
+     },
++    "node_modules/expo-image-loader": {
++      "version": "57.0.1",
++      "resolved": "https://registry.npmjs.org/expo-image-loader/-/expo-image-loader-57.0.1.tgz",
++      "integrity": "sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug==",
++      "license": "MIT",
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
++    "node_modules/expo-image-picker": {
++      "version": "57.0.20",
++      "resolved": "https://registry.npmjs.org/expo-image-picker/-/expo-image-picker-57.0.20.tgz",
++      "integrity": "sha512-plgcGuMZMWqDchjXQW6S/WepYLB5KqfbZOzwC6xe0+j5IhY4ipvVuRZcXeP/0NgKgU0Jiu/XoTK4Bi8crtZ+sQ==",
++      "license": "MIT",
++      "dependencies": {
++        "expo-image-loader": "~57.0.1"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo-keep-awake": {
+       "version": "57.0.2",
+       "resolved": "https://registry.npmjs.org/expo-keep-awake/-/expo-keep-awake-57.0.2.tgz",
+@@ -3505,6 +3539,18 @@
+         "react-native": "*"
+       }
+     },
++    "node_modules/expo-location": {
++      "version": "57.0.20",
++      "resolved": "https://registry.npmjs.org/expo-location/-/expo-location-57.0.20.tgz",
++      "integrity": "sha512-E9cr7A5eQS91bm3McMx3FiWy7SCorVTPLq9gLFFW+7dfuSqQp5FLNBZQ6NFJaS8tVhCyl2WyKMFh0TAo/+7K9Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@expo/image-utils": "^0.11.5"
++      },
++      "peerDependencies": {
++        "expo": "*"
++      }
++    },
+     "node_modules/expo-modules-autolinking": {
+       "version": "57.0.14",
+       "resolved": "https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-57.0.14.tgz",
+@@ -4362,12 +4408,6 @@
+       "integrity": "sha512-WDC/ui2VVRrz3jOVi+XtjqkDjiVjTtFaAGiW37k6b+ohyQ5wYDOGkvCZa8+H0nx3gyvv0+BST9xuOgIyGQ00gw==",
+       "license": "BSD-3-Clause"
+     },
+-    "node_modules/idb": {
+-      "version": "8.0.3",
+-      "resolved": "https://registry.npmjs.org/idb/-/idb-8.0.3.tgz",
+-      "integrity": "sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==",
+-      "license": "ISC"
+-    },
+     "node_modules/ignore": {
+       "version": "5.3.2",
+       "resolved": "https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz",
+@@ -4455,6 +4495,15 @@
+         "node": ">=0.12.0"
+       }
+     },
++    "node_modules/is-plain-obj": {
++      "version": "2.1.0",
++      "resolved": "https://registry.npmjs.org/is-plain-obj/-/is-plain-obj-2.1.0.tgz",
++      "integrity": "sha512-YWnfyRwxL/+SsrWYfOpUtz5b3YD+nyfkHvjbcanzk8zgyO4ASD67uVMRt8k5bM4lLMDnXfriRhOpemw+NfT1eA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=8"
++      }
++    },
+     "node_modules/is-wsl": {
+       "version": "2.2.0",
+       "resolved": "https://registry.npmjs.org/is-wsl/-/is-wsl-2.2.0.tgz",
+@@ -5075,6 +5124,18 @@
+       "integrity": "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==",
+       "license": "MIT"
+     },
++    "node_modules/merge-options": {
++      "version": "3.0.4",
++      "resolved": "https://registry.npmjs.org/merge-options/-/merge-options-3.0.4.tgz",
++      "integrity": "sha512-2Sug1+knBjkaMsMgf1ctR1Ujx+Ayku4EdJN4Z+C2+JzoeF7A3OZ9KM2GY0CpQS51NR61LTurMJrRKPhSs3ZRTQ==",
++      "license": "MIT",
++      "dependencies": {
++        "is-plain-obj": "^2.1.0"
++      },
++      "engines": {
++        "node": ">=10"
++      }
++    },
+     "node_modules/merge-stream": {
+       "version": "2.0.0",
+       "resolved": "https://registry.npmjs.org/merge-stream/-/merge-stream-2.0.0.tgz",
+@@ -6218,9 +6279,9 @@
+       }
+     },
+     "node_modules/react-native-safe-area-context": {
+-      "version": "5.10.1",
+-      "resolved": "https://registry.npmjs.org/react-native-safe-area-context/-/react-native-safe-area-context-5.10.1.tgz",
+-      "integrity": "sha512-ax0T3cAHQIhuAjDQpJ9C1Le96aRiM9PF+Kmgg7Y8+mD7QJMEIx04cG0eG3EGUTdvymgOkCrkakgZFwuOIuNQGw==",
++      "version": "5.7.0",
++      "resolved": "https://registry.npmjs.org/react-native-safe-area-context/-/react-native-safe-area-context-5.7.0.tgz",
++      "integrity": "sha512-/9/MtQz8ODphjsLdZ+GZAIcC/RtoqW9EeShf7Uvnfgm/pzYrJ75y3PV/J1wuAV1T5Dye5ygq4EAW20RoBq0ABQ==",
+       "license": "MIT",
+       "peerDependencies": {
+         "react": "*",
+@@ -6228,9 +6289,9 @@
+       }
+     },
+     "node_modules/react-native-screens": {
+-      "version": "4.29.0",
+-      "resolved": "https://registry.npmjs.org/react-native-screens/-/react-native-screens-4.29.0.tgz",
+-      "integrity": "sha512-zDZtvt0pU/eIWCLHwA48OMaC+jIfz7HJI0Kbdiywgh9xBY8rjV00zFlD6KIBxlmDFOzLrF0XvUwN+Xtnu/4V5Q==",
++      "version": "4.26.2",
++      "resolved": "https://registry.npmjs.org/react-native-screens/-/react-native-screens-4.26.2.tgz",
++      "integrity": "sha512-2XnWsZToKj76trGtEZzx5ELD/qOICFEprEeUntImmitQFVUkea27fiWdUSITArI356Y1qynpXZINW+Unbhky/A==",
+       "license": "MIT",
+       "dependencies": {
+         "react-freeze": "^1.0.0",
+diff --git a/package.json b/package.json
+index ecd7f75..d087bd9 100644
+--- a/package.json
++++ b/package.json
+@@ -13,20 +13,23 @@
+   },
+   "dependencies": {
+     "@expo/metro-runtime": "~57.0.16",
+-    "@react-native-async-storage/async-storage": "^3.1.1",
++    "@expo/vector-icons": "^15.0.2",
++    "@react-native-async-storage/async-storage": "2.2.0",
+     "expo": "~57.0.27",
+     "expo-constants": "~57.0.21",
+     "expo-font": "~57.0.4",
+     "expo-image": "^57.0.5",
++    "expo-image-picker": "~57.0.20",
+     "expo-linking": "~57.0.12",
++    "expo-location": "~57.0.20",
+     "expo-router": "~57.0.25",
+     "expo-status-bar": "~57.0.1",
+     "react": "19.2.3",
+     "react-dom": "19.2.3",
+     "react-native": "0.86.3",
+     "react-native-gesture-handler": "~2.32.0",
+-    "react-native-safe-area-context": "~5.10.1",
+-    "react-native-screens": "~4.29.0",
++    "react-native-safe-area-context": "~5.7.0",
++    "react-native-screens": "~4.26.0",
+     "react-native-web": "^0.21.0"
+   },
+   "devDependencies": {
+-- 
+2.39.5
+
