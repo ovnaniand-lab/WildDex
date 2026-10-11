@@ -1,81 +1,94 @@
 /**
- * Explore Screen — search, category chips, filters and species results.
- * Data comes from the Phase-1 preview repository (loading/empty states shown).
+ * Explore Screen — Phase 2 living encyclopedia.
+ *
+ * Live search + taxonomic category filters over GBIF / iNaturalist via the
+ * encyclopedia facade (no API logic in this file). Supports worldwide browse,
+ * free-text search by common or scientific name, pagination and explicit
+ * loading / empty / network-error states. The "My region" toggle restricts
+ * results to species *recorded* in the selected country or GPS area — the
+ * label never implies guaranteed current presence.
  */
 import EmptyState from '@/components/EmptyState';
+import EncyclopediaCard from '@/components/EncyclopediaCard';
 import LoadingState from '@/components/LoadingState';
-import SpeciesCard from '@/components/SpeciesCard';
 import { CardShadow, Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { repository, type SpeciesFilters } from '@/data/repository';
-import type { ConservationStatus, Species, SpeciesCategory } from '@/data/types';
-import { useRepositoryData } from '@/hooks/useRepositories';
+import type { SpeciesCategoryId } from '@/data/types';
 import { useWildDex } from '@/hooks/useWildDexState';
+import { useInfiniteSpecies } from '@/hooks/useInfiniteSpecies';
+import { CATEGORIES } from '@/data/previewData';
+import type { ExploreQuery, RegionContext } from '@/src/api/types';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const STATUS_OPTIONS: Array<{ id: ConservationStatus | 'all'; label: string }> = [
-  { id: 'all', label: 'All statuses' },
-  { id: 'least-concern', label: 'Least Concern' },
-  { id: 'near-threatened', label: 'Near Threatened' },
-  { id: 'vulnerable', label: 'Vulnerable' },
-  { id: 'endangered', label: 'Endangered' },
-  { id: 'critically-endangered', label: 'Critically Endangered' },
+/** Category chips: All + WildDex buckets (Ants stays inside Insects too). */
+const CHIPS: Array<{ id: SpeciesCategoryId | 'all'; name: string; emoji: string }> = [
+  { id: 'all', name: 'All', emoji: '✨' },
+  ...CATEGORIES.map((c) => ({ id: c.id as SpeciesCategoryId, name: c.name, emoji: c.emoji })),
 ];
 
 export default function ExploreScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
-  const { selectedRegionId, hasDiscovery } = useWildDex();
+  const { hasDiscovery, regionMode, selectedCountryCode, gpsPoint, radiusKm } = useWildDex();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [category, setCategory] = useState<string>(params.category ?? 'all');
-  const [status, setStatus] = useState<ConservationStatus | 'all'>('all');
+  const [category, setCategory] = useState<SpeciesCategoryId | 'all'>(
+    (params.category as SpeciesCategoryId) ?? 'all',
+  );
   const [regionOnly, setRegionOnly] = useState(false);
 
   // Keep chip selection in sync when navigating from Home shortcuts.
   useEffect(() => {
-    if (params.category) setCategory(params.category);
+    if (params.category) setCategory(params.category as SpeciesCategoryId);
   }, [params.category]);
 
-  // Debounce search input so we don't hammer the (future) API on each keystroke.
+  // Debounce search input so we don't hammer the public APIs on each keystroke.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    const t = setTimeout(() => setDebouncedQuery(query), 400);
     return () => clearTimeout(t);
   }, [query]);
 
-  const categoriesState = useRepositoryData<SpeciesCategory[]>(() => repository.getCategories(), []);
+  const region = useMemo<RegionContext | undefined>(() => {
+    if (!regionOnly) return undefined;
+    if (regionMode === 'gps' && gpsPoint) {
+      return { kind: 'nearby', lat: gpsPoint.lat, lon: gpsPoint.lon, radiusKm };
+    }
+    if (selectedCountryCode) {
+      return { kind: 'country', countryCode: selectedCountryCode };
+    }
+    return undefined;
+  }, [regionOnly, regionMode, gpsPoint, radiusKm, selectedCountryCode]);
 
-  const filters = useMemo<SpeciesFilters>(
+  const exploreQuery = useMemo<ExploreQuery>(
     () => ({
-      query: debouncedQuery,
-      categoryId: (category === 'all' ? 'all' : category) as SpeciesFilters['categoryId'],
-      status,
-      regionId: regionOnly ? selectedRegionId : 'all',
+      text: debouncedQuery.trim() || undefined,
+      category,
+      region,
+      pageSize: 20,
     }),
-    [debouncedQuery, category, status, regionOnly, selectedRegionId],
+    [debouncedQuery, category, region],
   );
 
-  const resultsState = useRepositoryData<Species[]>(
-    () => repository.getSpecies(filters),
-    [filters.query, filters.categoryId, filters.status, filters.regionId],
-  );
+  const { items, loading, loadingMore, error, endOfRecords, totalResults, refresh, loadMore } =
+    useInfiniteSpecies(exploreQuery);
 
-  const chips = [{ id: 'all', name: 'All', emoji: '✨' } as unknown as SpeciesCategory].concat(
-    categoriesState.data ?? [],
-  );
+  const onEndReached = useCallback(() => {
+    loadMore();
+  }, [loadMore]);
 
   const clearFilters = () => {
     setCategory('all');
-    setStatus('all');
     setRegionOnly(false);
     setQuery('');
   };
 
-  const hasActiveFilters = category !== 'all' || status !== 'all' || regionOnly || debouncedQuery.length > 0;
+  const hasActiveFilters = category !== 'all' || regionOnly || debouncedQuery.length > 0;
+  const regionLabel =
+    region?.kind === 'nearby' ? `within ${region.radiusKm ?? 50} km of you` : undefined;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -87,7 +100,7 @@ export default function ExploreScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search species…"
+            placeholder="Search common or scientific name…"
             placeholderTextColor={Colors.textSecondary}
             style={styles.searchInput}
             accessibilityLabel="Search species"
@@ -101,9 +114,9 @@ export default function ExploreScreen() {
           ) : null}
         </View>
 
-        {/* Category chips */}
+        {/* Category chips (taxon-key filtered, not keyword guessing) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {chips.map((c) => {
+          {CHIPS.map((c) => {
             const active = category === c.id;
             return (
               <Pressable
@@ -114,8 +127,7 @@ export default function ExploreScreen() {
                 style={[styles.chip, active && styles.chipActive]}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {'emoji' in c ? `${c.emoji} ` : ''}
-                  {c.name}
+                  {c.emoji} {c.name}
                 </Text>
               </Pressable>
             );
@@ -126,66 +138,82 @@ export default function ExploreScreen() {
         <View style={styles.filterRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Cycle conservation status filter"
-            onPress={() => {
-              const idx = STATUS_OPTIONS.findIndex((o) => o.id === status);
-              setStatus(STATUS_OPTIONS[(idx + 1) % STATUS_OPTIONS.length].id);
-            }}
-            style={[styles.filterPill, status !== 'all' && styles.filterPillActive]}
-          >
-            <Ionicons name="shield-checkmark-outline" size={16} color={status === 'all' ? Colors.textSecondary : Colors.warmCream} />
-            <Text style={[styles.filterText, status !== 'all' && styles.filterTextActive]}>
-              {STATUS_OPTIONS.find((o) => o.id === status)?.label ?? 'Status'}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle my region only filter"
+            accessibilityLabel="Toggle selected region filter"
             onPress={() => setRegionOnly((v) => !v)}
             style={[styles.filterPill, regionOnly && styles.filterPillActive]}
           >
             <Ionicons name="locate-outline" size={16} color={regionOnly ? Colors.warmCream : Colors.textSecondary} />
-            <Text style={[styles.filterText, regionOnly && styles.filterTextActive]}>My region</Text>
+            <Text style={[styles.filterText, regionOnly && styles.filterTextActive]}>
+              {regionOnly ? (regionLabel ?? 'Selected region only') : 'My region'}
+            </Text>
           </Pressable>
+          {!regionOnly ? (
+            <Text style={styles.scopeHint}>🌍 Worldwide results</Text>
+          ) : !region ? (
+            <Text style={styles.scopeHint}>Set a region in “Change region” first</Text>
+          ) : null}
           {hasActiveFilters ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Reset all filters" onPress={clearFilters} style={styles.reset}>
               <Text style={styles.resetText}>Reset</Text>
             </Pressable>
           ) : null}
         </View>
+        {totalResults !== undefined && !loading && !error ? (
+          <Text style={styles.countHint}>
+            {totalResults.toLocaleString()} taxa match · showing {items.length}. Results are species
+            recorded by GBIF / iNaturalist contributors.
+          </Text>
+        ) : null}
       </View>
 
-      {resultsState.loading ? (
-        <LoadingState message="Searching the field guide…" />
-      ) : resultsState.error ? (
+      {loading ? (
+        <LoadingState message="Searching the living encyclopedia…" />
+      ) : error ? (
         <EmptyState
           emoji="📡"
-          title="Something went wrong"
-          message={resultsState.error}
-          actionLabel="Try again"
-          onAction={resultsState.refetch}
+          title="Couldn’t reach nature’s database"
+          message={`${error} Your filters are kept — try again.`}
+          actionLabel="Retry"
+          onAction={refresh}
         />
       ) : (
         <FlatList
-          data={resultsState.data ?? []}
-          keyExtractor={(item) => item.id}
+          data={items}
+          keyExtractor={(item) => item.uid}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.list}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.4}
           ListEmptyComponent={
             <EmptyState
               emoji="🌾"
               title="No species found"
-              message="Nothing matches your search and filters yet. Try broadening them — full regional catalogs arrive with the Phase 2 backend."
+              message="Nothing matches your search right now. Try fewer words, another category, or browsing worldwide."
               actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
               onAction={hasActiveFilters ? clearFilters : undefined}
             />
           }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={Colors.forestGreen} />
+                <Text style={styles.footerText}>Loading more species…</Text>
+              </View>
+            ) : endOfRecords && items.length > 0 ? (
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>🌿 That’s everything for this search.</Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
-            <SpeciesCard
-              species={item}
-              variant="row"
-              discovered={hasDiscovery(item.id)}
-              onPress={() => router.push(`/species/${item.id}`)}
-            />
+            <View style={styles.cell}>
+              <EncyclopediaCard
+                species={item}
+                discovered={hasDiscovery(item.uid)}
+                onPress={() => router.push(`/species/${encodeURIComponent(item.uid)}`)}
+              />
+            </View>
           )}
         />
       )}
@@ -219,7 +247,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: Colors.forestGreen, borderColor: Colors.forestGreen },
   chipText: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
   chipTextActive: { color: Colors.textOnDark },
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingBottom: Spacing.sm },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingBottom: Spacing.xs, flexWrap: 'wrap' },
   filterPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,7 +262,13 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: Colors.leafGreen, borderColor: Colors.leafGreen },
   filterText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   filterTextActive: { color: Colors.textOnDark },
+  scopeHint: { fontSize: 11, fontWeight: '600', color: Colors.textSecondary, flexShrink: 1 },
   reset: { paddingHorizontal: Spacing.sm, paddingVertical: 7 },
   resetText: { fontSize: 12, fontWeight: '800', color: Colors.earthBrown },
-  list: { padding: Spacing.md, paddingTop: Spacing.xs, gap: Spacing.sm, paddingBottom: Spacing.xxl },
+  countHint: { fontSize: 11, color: Colors.textSecondary, lineHeight: 15 },
+  list: { padding: Spacing.md, paddingTop: Spacing.xs, paddingBottom: Spacing.xxl },
+  columnWrapper: { gap: Spacing.sm },
+  cell: { flex: 1 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: Spacing.lg },
+  footerText: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary },
 });
