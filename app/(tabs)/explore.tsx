@@ -211,7 +211,7 @@ export default function ExploreScreen() {
               <EncyclopediaCard
                 species={item}
                 discovered={hasDiscovery(item.uid)}
-                onPress={() => router.push(`/species/${encodeURIComponent(item.uid)}`)}
+                onPress={() => router.push({ pathname: "/species/live", params: { uid: item.uid } })}
               />
             </View>
           )}

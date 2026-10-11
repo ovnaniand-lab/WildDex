@@ -4,6 +4,8 @@
  * All content comes from the Phase-1 preview repository.
  */
 import CategoryCard from '@/components/CategoryCard';
+import EncyclopediaCard from '@/components/EncyclopediaCard';
+import LiveSpeciesRow, { fetchLiveRow } from '@/components/LiveSpeciesRow';
 import LoadingState from '@/components/LoadingState';
 import PrimaryButton from '@/components/PrimaryButton';
 import ProgressBar from '@/components/ProgressBar';
@@ -13,14 +15,43 @@ import { repository } from '@/data/repository';
 import type { Challenge, Species, SpeciesCategory } from '@/data/types';
 import { useRepositoryData } from '@/hooks/useRepositories';
 import { useWildDex } from '@/hooks/useWildDexState';
+import { getRecentSpecies, type RecentSpecies } from '@/src/api/encyclopedia';
+import type { EncyclopediaSpecies, RegionContext } from '@/src/api/types';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { Link, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { selectedRegionId, discoveries, hasDiscovery } = useWildDex();
+  const {
+    selectedRegionId,
+    discoveries,
+    hasDiscovery,
+    regionMode,
+    selectedCountryCode,
+    gpsPoint,
+    radiusKm,
+  } = useWildDex();
+
+  // Phase-2 live region context (manual country or one-shot GPS nearby mode).
+  const liveRegion: RegionContext | undefined =
+    regionMode === 'gps' && gpsPoint
+      ? { kind: 'nearby', lat: gpsPoint.lat, lon: gpsPoint.lon, radiusKm }
+      : regionMode === 'manual' && selectedCountryCode
+        ? { kind: 'country', countryCode: selectedCountryCode }
+        : undefined;
+
+  const [recents, setRecents] = useState<RecentSpecies[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getRecentSpecies().then((r) => alive && setRecents(r));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const region = repository.getRegionById(selectedRegionId);
   const categoriesState = useRepositoryData<SpeciesCategory[]>(() => repository.getCategories(), []);
@@ -84,6 +115,42 @@ export default function HomeScreen() {
             <Text style={styles.statLabel}>Worldwide</Text>
           </View>
         </View>
+
+        {/* Phase 2 — live biodiversity rows (GBIF / iNaturalist). Each row
+            hides itself while loading or offline so the dashboard never
+            shows spinners that block Phase-1 content. */}
+        <LiveSpeciesRow
+          title={liveRegion ? 'Observed in your region' : 'Explore your region'}
+          subtitle={
+            liveRegion
+              ? 'Species recorded by GBIF & iNaturalist contributors here — historical records, not guaranteed presence.'
+              : 'Pick a country or nearby mode to see locally recorded species.'
+          }
+          buildQuery={() => fetchLiveRow({ category: 'all', region: liveRegion })}
+        />
+
+        {recents.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recently viewed</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.md }}>
+              {recents.slice(0, 6).map((r) => (
+                <EncyclopediaMini key={r.uid} recent={r} onPress={() => router.push({ pathname: '/species/live', params: { uid: r.uid } })} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        <LiveSpeciesRow
+          title="Discover birds worldwide"
+          subtitle="Real observations from the iNaturalist community."
+          buildQuery={() => fetchLiveRow({ category: 'birds' })}
+        />
+
+        <LiveSpeciesRow
+          title="Plants & fungi spotlight"
+          subtitle="Green records from the global encyclopedia."
+          buildQuery={() => fetchLiveRow({ category: 'plants' })}
+        />
 
         {/* Featured wildlife */}
         <View style={styles.section}>
@@ -252,4 +319,30 @@ const styles = StyleSheet.create({
   progressCard: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: Spacing.md, gap: Spacing.sm },
   exploreCta: { marginTop: Spacing.xs },
   previewNote: { textAlign: 'center', fontSize: 11, color: Colors.textSecondary, marginTop: Spacing.sm },
+});
+
+
+/** Small recently-viewed tile (local data only — works offline). */
+function EncyclopediaMini({ recent, onPress }: { recent: RecentSpecies; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [miniStyles.tile, pressed && { opacity: 0.8 }]}>
+      {recent.imageUrl ? (
+        <Image source={{ uri: recent.imageUrl }} style={miniStyles.img} contentFit="cover" recyclingKey={recent.uid} />
+      ) : (
+        <View style={miniStyles.imgFallback}>
+          <Text style={{ fontSize: 26 }}>🌿</Text>
+        </View>
+      )}
+      <Text style={miniStyles.name} numberOfLines={1}>{recent.commonName}</Text>
+      <Text style={miniStyles.sci} numberOfLines={1}>{recent.scientificName}</Text>
+    </Pressable>
+  );
+}
+
+const miniStyles = StyleSheet.create({
+  tile: { width: 130, backgroundColor: Colors.white, borderRadius: Radius.md, ...CardShadow, overflow: 'hidden', padding: Spacing.sm, gap: 2 },
+  img: { width: '100%', height: 90, borderRadius: Radius.sm, backgroundColor: Colors.leafTint },
+  imgFallback: { width: '100%', height: 90, borderRadius: Radius.sm, backgroundColor: Colors.leafTint, alignItems: 'center', justifyContent: 'center' },
+  name: { ...Typography.caption, color: Colors.textPrimary, fontWeight: '700' },
+  sci: { fontSize: 11, color: Colors.textSecondary, fontStyle: 'italic' },
 });

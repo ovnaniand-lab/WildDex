@@ -21,7 +21,7 @@ export class ApiError extends Error {
 
 interface CacheEntry {
   at: number;
-   unknown;
+  data: unknown;
 }
 
 const cache = new Map<string, CacheEntry>();
