@@ -18,7 +18,7 @@ import type {
   Page,
   SpeciesPhoto,
 } from './types';
-import { CATEGORY_TAXA, gbifCategoryOf } from './taxonomy';
+import { gbifCategoryOf, matchesGbifCategory } from './taxonomy';
 import type { SpeciesCategoryId } from '@/data/types';
 
 const BASE = 'https://api.gbif.org/v1';
@@ -46,6 +46,17 @@ export function normalizeGbifRow(
   const nubKey = row.nubKey ?? row.key;
   const scientific = row.canonicalName ?? row.scientificName;
   if (!scientific || row.rank !== 'SPECIES') return null;
+  const actualCategory = gbifCategoryOf(row);
+
+if (!actualCategory) return null;
+
+if (
+  categoryId &&
+  categoryId !== actualCategory &&
+  !(categoryId === 'other-insects' && actualCategory === 'ants')
+) {
+  return null;
+}
   // Dataset-level rows have keys like nameKey != nubKey; prefer backbone usage.
   return {
     uid: `gbif:${nubKey}`,
@@ -53,7 +64,7 @@ export function normalizeGbifRow(
     sourceId: nubKey,
     commonName: row.vernacularName || scientific,
     scientificName: scientific,
-    categoryId: categoryId ?? gbifCategoryOf(row as never),
+    categoryId: actualCategory,
     photos: [], // search rows carry no media; detail screen enriches lazily
     taxonomy: {
       kingdom: row.kingdom,
@@ -80,8 +91,6 @@ export async function searchSpecies(
     q: query.text?.trim() || undefined,
     rank: 'SPECIES',
     // Taxon-key filter instead of keyword guessing on names:
-    taxonKey:
-      query.category && query.category !== 'all' ? CATEGORY_TAXA[query.category].gbifKeys[0] : undefined,
     limit,
     offset,
   };
@@ -92,6 +101,7 @@ export async function searchSpecies(
   const items: EncyclopediaSpecies[] = [];
   for (const row of res.results) {
     const nub = row.nubKey ?? row.key;
+    if (!matchesGbifCategory(row, query.category ?? 'all')) continue;
     if (seen.has(nub)) continue; // dedupe dataset duplicates of same taxon
     seen.add(nub);
     const norm = normalizeGbifRow(row, query.category === 'all' ? undefined : query.category);

@@ -14,7 +14,9 @@ import type { SpeciesCategoryId } from '@/data/types';
 
 import * as gbif from './gbif';
 import * as inat from './inaturalist';
+import { matchesGbifCategory, gbifCategoryOf } from './taxonomy';
 import { enrichFromWikimedia } from './wikipedia';
+import { plainDescription } from './descriptionText';
 import type {
   EncyclopediaSpecies,
   ExploreQuery,
@@ -66,6 +68,14 @@ export async function fetchSpeciesPage(query: ExploreQuery, offset: number): Pro
   for (const item of [...(inatPage?.items ?? []), ...(gbifPage?.items ?? [])]) {
     const key = item.scientificName.toLowerCase();
     if (seenSci.has(key)) continue; // avoid duplicate taxa across providers
+    if (
+  q.category &&
+  q.category !== 'all' &&
+  item.source === 'gbif' &&
+  !matchesGbifCategory(item.taxonomy, q.category)
+) {
+  continue;
+}
     seenSci.add(key);
     merged.push(item);
   }
@@ -112,7 +122,7 @@ async function applyWikimediaFallbacks(detail: SpeciesDetail): Promise<SpeciesDe
     photos = [wm.photo];
     gallery = [wm.photo];
   }
-  const summary = detail.summary ?? wm.description?.text;
+  const summary = plainDescription(detail.summary ?? wm.description?.text);
   const descriptionSource = detail.descriptionSource ?? (wm.description && needsDescription ? wm.description : undefined);
 
   return { ...detail, photos, gallery, summary, descriptionSource };
@@ -128,6 +138,8 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
     const taxon = await inat.getInatTaxonById(id);
     if (!taxon) return null;
     const base = inat.normalizeInatTaxon(taxon, undefined, region);
+    // Taxon observations_count is worldwide; don't label it as a regional count.
+    if (region) base.observationCount = undefined;
     const ancestors = await inat.getInatAncestors(id).catch(() => []);
     const rank = (r: string) => ancestors.find((a) => a.rank === r)?.name;
     const observations = await inat
@@ -136,7 +148,7 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
     const detail: SpeciesDetail = {
       ...base,
       fullTaxonomy: {
-        kingdom: rank('kingdom') ?? taxon.iconic_taxon_name,
+        kingdom: rank('kingdom'),
         phylum: rank('phylum'),
         class: rank('class'),
         order: rank('order'),
@@ -169,7 +181,7 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
       sourceId: id,
       commonName: names[0] ?? usage.canonicalName ?? usage.scientificName ?? String(id),
       scientificName: usage.canonicalName ?? usage.scientificName ?? String(id),
-      categoryId: 'other-insects',
+      categoryId: (gbifCategoryOf(usage) ?? 'other-insects'),
       photos: evidence.photos,
       taxonomy: {
         kingdom: usage.kingdom,
@@ -180,8 +192,8 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
         genus: usage.genus,
         species: usage.species,
       },
-      summary: usage.descriptions?.[0]?.description,
-      observationCount: evidence.count,
+      summary: plainDescription(usage.descriptions?.[0]?.description),
+      observationCount: region?.kind === 'nearby' ? undefined : evidence.count,
       lastObserved: evidence.lastObserved,
       regionContext: region,
       gbifNubKey: id,
