@@ -7,6 +7,8 @@
  */
 
 import { getJson, withParams } from './http';
+import { countryByCode } from './countries';
+import { plainDescription } from './descriptionText';
 import type {
   EncyclopediaSpecies,
   ExploreQuery,
@@ -17,7 +19,7 @@ import type {
   RegionContext,
   SpeciesPhoto,
 } from './types';
-import { CATEGORY_TAXA, inatCategoryOf } from './taxonomy';
+import { CATEGORY_TAXA, inatCategoryOf, matchesInatCategory } from './taxonomy';
 import type { SpeciesCategoryId } from '@/data/types';
 
 const BASE = 'https://api.inaturalist.org/v1';
@@ -61,13 +63,13 @@ export function normalizeInatTaxon(
     sourceId: taxon.id,
     commonName: taxon.preferred_common_name || taxon.name,
     scientificName: taxon.name,
-    categoryId: categoryId ?? inatCategoryOf(taxon),
+    categoryId: categoryId ?? inatCategoryOf(taxon) ?? 'other-insects',
     photos: toPhotos(taxon),
     taxonomy: {
-      kingdom: taxon.iconic_taxon_name,
-      // Full rank names are fetched lazily on the detail screen via ancestors.
+      // Kingdom is resolved from the actual ancestor chain on the detail page;
+      // iconic_taxon_name is often 'Aves' or 'Actinopterygii', not a kingdom.
     },
-    summary: taxon.wikipedia_summary ?? undefined,
+    summary: plainDescription(taxon.wikipedia_summary),
     observationCount: observationCount ?? taxon.observations_count,
     regionContext: region,
     inatTaxonId: taxon.id,
@@ -114,24 +116,25 @@ export async function searchSpecies(query: ExploreQuery, offset: number): Promis
   const page = Math.floor(offset / pageSize) + 1;
 
   if (query.region) {
-    const counts = await speciesCountsForRegion(query, page, pageSize);
+    const countsResponse = await speciesCountsForRegion(query, page, pageSize);
+    const counts = countsResponse.results;
     const items = counts.flatMap((obs) =>
-      obs.taxon && SPECIES_RANKS.has(obs.taxon.rank)
+      obs.taxon && SPECIES_RANKS.has(obs.taxon.rank) && matchesInatCategory(obs.taxon, query.category ?? 'all')
         ? [normalizeInatTaxon(obs.taxon, query.category === 'all' ? undefined : query.category, query.region, obs.count)]
         : [],
     );
-    const end = items.length < pageSize && page * pageSize >= counts.length;
+    const end = page * pageSize >= countsResponse.total_results;
     return {
       items,
       nextOffset: end ? null : offset + pageSize,
-      totalResults: counts.length,
+      totalResults: countsResponse.total_results,
       endOfRecords: end,
     };
   }
 
   const res = await searchTaxa({ text: query.text, category: query.category, page, pageSize });
   const items = res.results
-    .filter((t) => t.is_active !== false && (query.text ? true : SPECIES_RANKS.has(t.rank)))
+    .filter((t) => t.is_active !== false && SPECIES_RANKS.has(t.rank) && matchesInatCategory(t, query.category ?? 'all'))
     .map((t) => normalizeInatTaxon(t, query.category === 'all' ? undefined : query.category));
   const hasMore = res.page * res.per_page < res.total_results;
   return {
@@ -146,12 +149,39 @@ interface CountedObservation extends InatObservation {
   count: number;
 }
 
+/** iNaturalist uses numeric place_id for country filtering, not ISO country_code. */
+type InatPlace = { id: number; name: string; place_type?: number; place_type_name?: string };
+const countryPlacePromises = new Map<string, Promise<number>>();
+
+async function resolveCountryPlaceId(countryCode: string): Promise<number> {
+  const code = countryCode.toUpperCase();
+  const existing = countryPlacePromises.get(code);
+  if (existing) return existing;
+  const lookup = (async () => {
+    const country = countryByCode(code);
+    if (!country) throw new Error(`Unsupported country code: ${code}`);
+    const response = await getJson<InatResponse<InatPlace>>(
+      withParams(`${BASE}/places/autocomplete`, { q: country.name }),
+    );
+    const matching = response.results.find((place) =>
+      place.name.toLocaleLowerCase().trim() === country.name.toLocaleLowerCase().trim() &&
+      (place.place_type === 12 || place.place_type_name?.toLowerCase() === 'country') &&
+      Number.isInteger(place.id),
+    );
+    if (!matching) throw new Error(`Cannot verify iNaturalist country boundary for ${country.name}`);
+    return matching.id;
+  })();
+  countryPlacePromises.set(code, lookup);
+  try { return await lookup; }
+  catch (error) { countryPlacePromises.delete(code); throw error; }
+}
+
 /** Species observed in the selected country or within radius of GPS point. */
 async function speciesCountsForRegion(
   query: ExploreQuery,
   page: number,
   perPage: number,
-): Promise<CountedObservation[]> {
+): Promise<InatResponse<CountedObservation>> {
   const r = query.region!;
   const params: Record<string, string | number | undefined> = {
     per_page: perPage,
@@ -159,7 +189,7 @@ async function speciesCountsForRegion(
     quality_grade: 'research,needs_id',
   };
   if (r.kind === 'country' && r.countryCode) {
-    params.country_code = r.countryCode.toUpperCase();
+    params.place_id = await resolveCountryPlaceId(r.countryCode);
   } else if (r.kind === 'nearby' && r.lat !== undefined && r.lon !== undefined) {
     const km = r.radiusKm ?? 50;
     params.lat = r.lat;
@@ -172,14 +202,14 @@ async function speciesCountsForRegion(
   if (query.text?.trim()) {
     // species_counts has no free-text param: resolve the name via /taxa first.
     const taxa = await searchTaxa({ text: query.text, category: query.category, page: 1, pageSize: 10 });
-    const ids = taxa.results.filter((t) => SPECIES_RANKS.has(t.rank)).map((t) => t.id);
-    if (ids.length === 0) return [];
+    const ids = taxa.results.filter((t) => SPECIES_RANKS.has(t.rank) && matchesInatCategory(t, query.category ?? 'all')).map((t) => t.id);
+    if (ids.length === 0) return { results: [], total_results: 0, page, per_page: perPage };
     params.taxon_id = ids.slice(0, 10).join(',');
   }
   const res = await getJson<InatResponse<CountedObservation>>(
     withParams(`${BASE}/observations/species_counts`, params),
   );
-  return res.results;
+  return res;
 }
 
 /** Lazy taxonomy chain (kingdom → species) for the detail screen. */
@@ -208,7 +238,7 @@ export async function getInatObservationsFor(
     verifiable: 'true',
   };
   if (region?.kind === 'country' && region.countryCode) {
-    params.country_code = region.countryCode.toUpperCase();
+    params.place_id = await resolveCountryPlaceId(region.countryCode);
   } else if (region?.kind === 'nearby' && region.lat !== undefined && region.lon !== undefined) {
     params.lat = region.lat;
     params.lon = region.lon;

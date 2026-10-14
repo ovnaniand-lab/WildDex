@@ -39,7 +39,8 @@ export default function ExploreScreen() {
   const [category, setCategory] = useState<SpeciesCategoryId | 'all'>(
     (params.category as SpeciesCategoryId) ?? 'all',
   );
-  const [regionOnly, setRegionOnly] = useState(false);
+  // Honor an already chosen country/GPS region on initial Explore load.
+  const [regionOnly, setRegionOnly] = useState(() => Boolean(selectedCountryCode || gpsPoint));
 
   // Keep chip selection in sync when navigating from Home shortcuts.
   useEffect(() => {
@@ -166,7 +167,9 @@ export default function ExploreScreen() {
         ) : null}
       </View>
 
-      {loading ? (
+      {regionOnly && !region ? (
+        <EmptyState emoji="🧭" title="Choose a region" message="Select a country or enable GPS in Change region before filtering locally." />
+      ) : loading ? (
         <LoadingState message="Searching the living encyclopedia…" />
       ) : error ? (
         <EmptyState
