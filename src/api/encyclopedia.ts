@@ -14,6 +14,7 @@ import type { SpeciesCategoryId } from '@/data/types';
 
 import * as gbif from './gbif';
 import * as inat from './inaturalist';
+import { enrichFromWikimedia } from './wikipedia';
 import type {
   EncyclopediaSpecies,
   ExploreQuery,
@@ -54,7 +55,10 @@ export async function fetchSpeciesPage(query: ExploreQuery, offset: number): Pro
 
   const [inatPage, gbifPage] = await Promise.all([
     inat.searchSpecies(q, offset).catch(() => null),
-    offset === 0 && !q.text ? Promise.resolve(null) : gbif.searchSpecies(q, offset).catch(() => null),
+    // Only mix GBIF backbone rows when the user explicitly searched by name;
+    // plain browsing stays on iNaturalist so every card carries a photo and
+    // a description (GBIF search rows have neither).
+    q.text ? gbif.searchSpecies(q, offset).catch(() => null) : Promise.resolve(null),
   ]);
 
   const merged: EncyclopediaSpecies[] = [];
@@ -88,6 +92,32 @@ export interface SpeciesDetail extends EncyclopediaSpecies {
   recentObservations: Array<{ date?: string; where: string }>;
 }
 
+/**
+ * Phase 2D enrichment pass shared by both providers: when GBIF/iNaturalist
+ * did not return a usable photograph or description, fall back to Wikimedia
+ * (article-resolved page image + lead summary), always with licence info.
+ * Matching is anchored on the scientific name, never on common names alone.
+ */
+async function applyWikimediaFallbacks(detail: SpeciesDetail): Promise<SpeciesDetail> {
+  const needsPhoto = detail.photos.length === 0;
+  const needsDescription = !detail.summary;
+  if (!needsPhoto && !needsDescription) return detail;
+
+  const wm = await enrichFromWikimedia(detail.scientificName).catch(() => null);
+  if (!wm) return detail;
+
+  let photos = detail.photos;
+  let gallery = detail.gallery;
+  if (needsPhoto && wm.photo) {
+    photos = [wm.photo];
+    gallery = [wm.photo];
+  }
+  const summary = detail.summary ?? wm.description?.text;
+  const descriptionSource = detail.descriptionSource ?? (wm.description && needsDescription ? wm.description : undefined);
+
+  return { ...detail, photos, gallery, summary, descriptionSource };
+}
+
 /** Load a species by its stable "provider:id" uid, enriched for the profile. */
 export async function getSpeciesByUid(uid: string, region?: RegionContext): Promise<SpeciesDetail | null> {
   const [provider, idStr] = uid.split(':');
@@ -103,7 +133,7 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
     const observations = await inat
       .getInatObservationsFor(id, region)
       .catch(() => []);
-    return {
+    const detail: SpeciesDetail = {
       ...base,
       fullTaxonomy: {
         kingdom: rank('kingdom') ?? taxon.iconic_taxon_name,
@@ -120,6 +150,9 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
         where: o.quality_grade ?? 'observation',
       })),
     };
+    // iNat "photos" browse filter can still yield taxa whose photo fields were
+    // stripped (obscured/removed); enrich anything missing from Wikimedia.
+    return applyWikimediaFallbacks(detail);
   }
 
   if (provider === 'gbif') {
@@ -155,7 +188,10 @@ export async function getSpeciesByUid(uid: string, region?: RegionContext): Prom
       profileUrl: `https://www.gbif.org/species/${id}`,
       dataLicense: 'GBIF Backbone Taxonomy (CC BY 4.0)',
     };
-    return { ...base, fullTaxonomy: base.taxonomy, gallery: evidence.photos, recentObservations: [] };
+    const detail: SpeciesDetail = { ...base, fullTaxonomy: base.taxonomy, gallery: evidence.photos, recentObservations: [] };
+    // GBIF search rows carry no media; Wikimedia supplies a licensed fallback
+    // photo + sourced description when occurrences/descriptions are absent.
+    return applyWikimediaFallbacks(detail);
   }
 
   return null;

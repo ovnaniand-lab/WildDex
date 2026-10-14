@@ -114,8 +114,15 @@ export default function LiveSpeciesProfileScreen() {
               accessibilityLabel={`Photograph of ${species.commonName}`}
             />
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>{species.source === 'gbif' ? 'GBIF' : 'iNaturalist'}</Text>
+              <Text style={styles.heroBadgeText}>
+                {species.source === 'gbif' ? 'GBIF' : species.source === 'inaturalist' ? 'iNaturalist' : 'Wikimedia'}
+              </Text>
             </View>
+            {/* Compact credit line under the hero image (full credits in gallery section) */}
+            <Text style={styles.heroCredit} numberOfLines={2}>
+              📷 {photo.attribution}
+              {photo.license ? ` · ${photo.license}` : ''}
+            </Text>
           </View>
         ) : (
           <View style={[styles.heroFallback, { height: Math.round(heroH * 0.6) }]}>
@@ -148,19 +155,46 @@ export default function LiveSpeciesProfileScreen() {
               ))}
             </ScrollView>
             {photo && (
-              <Text style={styles.attribution} accessibilityRole="text">
-                📷 {photo.attribution}
-                {photo.originalUrl ? ' · tap the source link below to view the original' : ''}
-              </Text>
+              <View style={styles.creditCard}>
+                <Text style={styles.attribution} accessibilityRole="text">
+                  📷 {photo.attribution}
+                </Text>
+                <Text style={styles.licenseNote}>
+                  {photo.source === 'wikimedia' ? 'Wikimedia Commons' : photo.source === 'gbif' ? 'GBIF media archive' : 'iNaturalist community'}
+                  {' · '}
+                  {photo.license ? `Licence: ${photo.license}` : 'Licence shown on the original photo page'}
+                  {'. Some licences restrict commercial use.'}
+                </Text>
+                {photo.originalUrl ? (
+                  <SourceLink icon="image-outline" label="View original photograph page" href={photo.originalUrl} />
+                ) : null}
+              </View>
             )}
           </View>
         )}
 
-        {/* Description */}
+        {/* Description — always shown with its source when available */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Description</Text>
-          {species.summary ? (
-            <Text style={styles.paragraph}>{species.summary}</Text>
+          {species.descriptionSource ? (
+            <View style={styles.descCard}>
+              <Text style={styles.paragraph}>{species.descriptionSource.text}</Text>
+              <View style={styles.descSourceRow}>
+                <Ionicons name="book-outline" size={14} color={Colors.earthBrown} />
+                <Text style={styles.descSourceText}>
+                  Source: {species.descriptionSource.articleTitle} ({species.descriptionSource.provider}) · {species.descriptionSource.license}
+                </Text>
+              </View>
+              <SourceLink
+                icon="open-outline"
+                label={`Read the full ${species.descriptionSource.provider === 'wikipedia' ? 'Wikipedia article' : 'source record'}`}
+                href={species.descriptionSource.url}
+              />
+            </View>
+          ) : species.summary ? (
+            <View style={styles.descCard}>
+              <Text style={styles.paragraph}>{species.summary}</Text>
+            </View>
           ) : (
             <Text style={styles.fallback}>No description is available from a reliable source for this taxon yet.</Text>
           )}
@@ -324,6 +358,12 @@ const styles = StyleSheet.create({
   thumbActive: { borderColor: Colors.goldenAmber },
   thumb: { width: 72, height: 72 },
   attribution: { ...Typography.caption, color: palette.muted },
+  creditCard: { ...SoftShadow, backgroundColor: palette.surface, borderRadius: Radius.md, padding: Spacing.sm, gap: 4 },
+  licenseNote: { ...Typography.caption, color: palette.muted, fontSize: 11 },
+  heroCredit: { ...Typography.caption, color: palette.muted, fontSize: 11, marginTop: 4 },
+  descCard: { ...SoftShadow, backgroundColor: palette.surface, borderRadius: Radius.lg, padding: Spacing.md, gap: Spacing.sm },
+  descSourceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.divider, paddingTop: Spacing.sm },
+  descSourceText: { ...Typography.caption, color: Colors.earthBrown, flex: 1, fontSize: 11 },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   linkText: { ...Typography.caption, color: Colors.forestGreen, fontWeight: '600', flex: 1 },
   cta: { marginTop: Spacing.sm },

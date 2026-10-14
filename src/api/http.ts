@@ -48,7 +48,11 @@ async function fetchOnce(url: string): Promise<Response> {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     return await fetch(url, {
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        // Wikimedia APIs require an identifying User-Agent; GBIF/iNat allow it too.
+        'User-Agent': 'WildDex/1.0 (nature encyclopedia app; public read-only data)',
+      },
       signal: controller.signal,
     });
   } finally {

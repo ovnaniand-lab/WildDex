@@ -42,6 +42,7 @@ function toPhotos(taxon: InatTaxon): SpeciesPhoto[] {
       attribution: p?.attribution ?? `iNaturalist contributor (photo ${p?.id ?? ''})`,
       source: 'inaturalist',
       originalUrl: `https://www.inaturalist.org/photos/${p?.id}`,
+      license: p?.license_code ?? 'no code — see attribution',
     });
   }
   return out;
@@ -88,8 +89,10 @@ async function searchTaxa(args: TaxonSearchArgs): Promise<InatResponse<InatTaxon
     q: args.text?.trim() || undefined,
     per_page: args.pageSize,
     page: args.page,
-    // Prefer complete records with photos; keeps cards visually useful.
-    media_type: args.text ? undefined : 'photos',
+    // Always require at least one photo so every Explore card renders real
+    // wildlife photography (Phase 2D). Text searches keep the constraint too;
+    // taxa without photos are still reachable via GBIF merge + detail fallback.
+    media_type: 'photos',
     is_active: 'true',
   };
   if (args.category && args.category !== 'all') {

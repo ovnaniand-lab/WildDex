@@ -12,7 +12,7 @@ import type { SpeciesCategoryId } from '@/data/types';
 /* Normalized internal model                                          */
 /* ------------------------------------------------------------------ */
 
-export type SourceKind = 'gbif' | 'inaturalist';
+export type SourceKind = 'gbif' | 'inaturalist' | 'wikimedia';
 
 /** Stable cross-provider identifier: "gbif:2435099" / "inat:42007". */
 export type SpeciesUid = string;
@@ -24,6 +24,20 @@ export interface SpeciesPhoto {
   source: SourceKind;
   /** Original photo page, when the provider gives one. */
   originalUrl?: string;
+  /** Licence tag supplied by the provider (CC0, CC BY-SA 4.0, …). */
+  license?: string;
+}
+
+/** Source-backed descriptive content shown on the profile. */
+export interface SpeciesDescriptionSource {
+  text: string;
+  /** Human-readable source label, e.g. "Wikipedia — Cougar". */
+  articleTitle: string;
+  provider: 'wikipedia' | 'gbif' | 'inaturalist';
+  /** Canonical URL of the underlying article/record. */
+  url: string;
+  /** Licence of the descriptive text (Wikipedia text is CC BY-SA 4.0). */
+  license: string;
 }
 
 export interface TaxonomyInfo {
@@ -59,6 +73,8 @@ export interface EncyclopediaSpecies {
   taxonomy: TaxonomyInfo;
   /** Short description ONLY when a reliable source provides one. */
   summary?: string;
+  /** Source-backed description(s) shown on the profile with article/link/licence. */
+  descriptionSource?: SpeciesDescriptionSource;
   /** Observation evidence for the current region context. */
   observationCount?: number;
   lastObserved?: string;
