@@ -91,6 +91,25 @@ export default function ExploreScreen() {
   const regionLabel =
     region?.kind === 'nearby' ? `within ${region.radiusKm ?? 50} km of you` : undefined;
 
+// NEW: Memoized species card renderer
+const renderSpecies = useCallback(
+  ({ item }: { item: (typeof items)[number] }) => (
+    <View style={styles.cell}>
+      <EncyclopediaCard
+        species={item}
+        discovered={hasDiscovery(item.uid)}
+        onPress={() =>
+          router.push({
+            pathname: '/species/live',
+            params: { uid: item.uid },
+          })
+        }
+      />
+    </View>
+  ),
+  [hasDiscovery, router]
+);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -184,6 +203,9 @@ export default function ExploreScreen() {
           data={items}
           keyExtractor={(item) => item.uid}
           numColumns={2}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={50}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={styles.list}
           onEndReached={onEndReached}
@@ -209,15 +231,7 @@ export default function ExploreScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <View style={styles.cell}>
-              <EncyclopediaCard
-                species={item}
-                discovered={hasDiscovery(item.uid)}
-                onPress={() => router.push({ pathname: "/species/live", params: { uid: item.uid } })}
-              />
-            </View>
-          )}
+          renderItem={renderSpecies}
         />
       )}
     </SafeAreaView>

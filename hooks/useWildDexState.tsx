@@ -114,10 +114,15 @@ export function WildDexProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const hasDiscovery = useCallback(
-    (speciesId: string) => discoveries.includes(speciesId),
-    [discoveries],
-  );
+  const discoverySet = useMemo(
+  () => new Set(discoveries),
+  [discoveries],
+);
+
+const hasDiscovery = useCallback(
+  (speciesId: string) => discoverySet.has(speciesId),
+  [discoverySet],
+);
 
   const completeOnboarding = useCallback(async () => {
     setOnboarded(true);
