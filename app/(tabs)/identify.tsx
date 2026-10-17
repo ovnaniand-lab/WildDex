@@ -1,18 +1,17 @@
 /**
- * Identify Screen — introduces camera-based identification.
- *
- * ⚠️ Phase 1: no AI recognition is implemented and no backend is connected.
- * The buttons below pick/launch a real image source via expo-image-picker so
- * the UX flow is genuine; in Phase 2 the chosen image will be uploaded to the
- * WildDex identification service.
+ * Identify Screen — camera/gallery and Phase 3B.3 results UI.
+ * The example results are explicitly marked as samples.
+ * Live photo uploads are not enabled until backend authentication is ready.
  */
 import EmptyState from '@/components/EmptyState';
 import PrimaryButton from '@/components/PrimaryButton';
+import PlantIdentificationResults, { type PlantSuggestion } from '@/components/PlantIdentificationResults';
 import { CardShadow, Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,6 +21,14 @@ interface Step {
   body: string;
 }
 
+const SAMPLE_RESULTS: PlantSuggestion[] = [
+  { scientificName: 'Dahlia pinnata', commonNames: ['Dahlia', 'Garden dahlia'], family: 'Asteraceae', score: 0.61585 },
+  { scientificName: 'Dahlia tenuicaulis', commonNames: ['Dahlia', 'Tree dahlia'], family: 'Asteraceae', score: 0.09844 },
+  { scientificName: 'Dahlia × hortensis', commonNames: ['Garden dahlia', 'Hybrid dahlia'], family: 'Asteraceae', score: 0.09366 },
+  { scientificName: 'Dahlia merckii', commonNames: ['Bedding Dahlia'], family: 'Asteraceae', score: 0.04269 },
+  { scientificName: 'Tanacetum coccineum', commonNames: ['Persian daisy'], family: 'Asteraceae', score: 0.01897 },
+];
+
 const STEPS: Step[] = [
   { icon: 'flash-outline', title: 'Get close, get light', body: 'Fill the frame with the animal or plant and use natural daylight where possible.' },
   { icon: 'albums-outline', title: 'Capture one subject', body: 'Clear photos of a single species identify best — avoid busy backgrounds.' },
@@ -30,12 +37,33 @@ const STEPS: Step[] = [
 ];
 
 export default function IdentifyScreen() {
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const { recoveredPhoto } = useLocalSearchParams<{
+    recoveredPhoto?: string;
+  }>();
+
+  const [imageUri, setImageUri] = useState<string | null>(
+    recoveredPhoto ?? null
+  );
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showSampleResults, setShowSampleResults] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const resetResults = () => {
+    setShowSampleResults(false);
+    setSelectedSample(null);
+    setPhotoError(null);
+  };
+
+  const removePhoto = () => {
+    setImageUri(null);
+    resetResults();
+  };
 
   const pickImage = async (source: 'camera' | 'library') => {
     setBusy(true);
+    setPhotoError(null);
     try {
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -44,7 +72,10 @@ export default function IdentifyScreen() {
           return;
         }
         const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-        if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+        if (!result.canceled && result.assets[0]) {
+          resetResults();
+          setImageUri(result.assets[0].uri);
+        }
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
@@ -52,11 +83,14 @@ export default function IdentifyScreen() {
           allowsEditing: true,
           aspect: [4, 3],
         });
-        if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+        if (!result.canceled && result.assets[0]) {
+          resetResults();
+          setImageUri(result.assets[0].uri);
+        }
       }
       setPermissionDenied(false);
     } catch {
-      setPermissionDenied(false);
+      setPhotoError('Could not open the photo source. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -81,7 +115,7 @@ export default function IdentifyScreen() {
             conservation status.
           </Text>
           <Text style={styles.phaseBadge}>
-            🚧 Identification service arrives in Phase 2 — this screen demonstrates the capture flow only.
+            Phase 3B.3: Results preview is available. Live mobile identification is not enabled yet.
           </Text>
         </View>
 
@@ -115,9 +149,24 @@ export default function IdentifyScreen() {
               contentFit="cover"
               accessibilityLabel="Selected photograph ready for identification"
             />
-            <Text style={styles.previewText}>Photo ready ✓ — matching will run once the Phase 2 service is connected.</Text>
-            <PrimaryButton label="Remove photo" variant="ghost" onPress={() => setImageUri(null)} />
+            <Text style={styles.previewText}>Photo ready. The preview below uses a previous Dahlia API response; this photo has NOT been analyzed.</Text>
+            <PrimaryButton
+              label={showSampleResults ? 'Hide sample results' : 'Preview identification results (sample)'}
+              onPress={() => { setShowSampleResults((value) => !value); setSelectedSample(null); }}
+            />
+            <PrimaryButton label="Remove photo" variant="ghost" onPress={removePhoto} />
           </View>
+        ) : null}
+
+        {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
+
+        {imageUri && showSampleResults ? (
+          <PlantIdentificationResults
+            suggestions={SAMPLE_RESULTS}
+            selectedName={selectedSample}
+            onSelect={(suggestion) => setSelectedSample(suggestion.scientificName)}
+            demo
+          />
         ) : null}
 
         {/* Permission explanation */}
@@ -196,6 +245,7 @@ const styles = StyleSheet.create({
   previewCard: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: Spacing.sm, gap: Spacing.sm },
   previewImage: { width: '100%', height: 220, borderRadius: Radius.md, backgroundColor: Colors.leafTint },
   previewText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
+  errorText: { color: '#A12B2B', fontSize: 13, fontWeight: '600' },
   permissionCard: {
     flexDirection: 'row',
     gap: Spacing.sm,
