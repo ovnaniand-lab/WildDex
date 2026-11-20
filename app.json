@@ -7,12 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "wilddex",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1B5E20"
-    },
+    
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.wilddex.mobile"
@@ -34,7 +29,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#1B5E20"
+        }
+      ]
     ],
     "extra": {
       "router": {},
