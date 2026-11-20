@@ -1,7 +1,6 @@
 /**
- * Identify Screen — camera/gallery and Phase 3B.3 results UI.
- * The example results are explicitly marked as samples.
- * Live photo uploads are not enabled until backend authentication is ready.
+ * Identify Screen — camera/gallery and live Pl@ntNet plant identification.
+ * Photos are uploaded only after the user taps Identify Plant.
  */
 import EmptyState from '@/components/EmptyState';
 import PrimaryButton from '@/components/PrimaryButton';
@@ -10,7 +9,8 @@ import { CardShadow, Colors, Radius, Spacing, Typography } from '@/constants/the
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { identifyPlant } from '@/src/api/plantIdentification';
 import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,19 +21,11 @@ interface Step {
   body: string;
 }
 
-const SAMPLE_RESULTS: PlantSuggestion[] = [
-  { scientificName: 'Dahlia pinnata', commonNames: ['Dahlia', 'Garden dahlia'], family: 'Asteraceae', score: 0.61585 },
-  { scientificName: 'Dahlia tenuicaulis', commonNames: ['Dahlia', 'Tree dahlia'], family: 'Asteraceae', score: 0.09844 },
-  { scientificName: 'Dahlia × hortensis', commonNames: ['Garden dahlia', 'Hybrid dahlia'], family: 'Asteraceae', score: 0.09366 },
-  { scientificName: 'Dahlia merckii', commonNames: ['Bedding Dahlia'], family: 'Asteraceae', score: 0.04269 },
-  { scientificName: 'Tanacetum coccineum', commonNames: ['Persian daisy'], family: 'Asteraceae', score: 0.01897 },
-];
-
 const STEPS: Step[] = [
   { icon: 'flash-outline', title: 'Get close, get light', body: 'Fill the frame with the animal or plant and use natural daylight where possible.' },
   { icon: 'albums-outline', title: 'Capture one subject', body: 'Clear photos of a single species identify best — avoid busy backgrounds.' },
   { icon: 'leaf-outline', title: 'Add context', body: 'Note habitat (forest floor, pond, sky) — it helps narrow candidates.' },
-  { icon: 'bookmark-outline', title: 'Save your discovery', body: 'Confirm the match and it lands in your regional collection automatically.' },
+  { icon: 'bookmark-outline', title: 'Review your match', body: 'Check the suggested species carefully. Saving discoveries will be added next.' },
 ];
 
 export default function IdentifyScreen() {
@@ -46,22 +38,66 @@ export default function IdentifyScreen() {
   );
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [showSampleResults, setShowSampleResults] = useState(false);
-  const [selectedSample, setSelectedSample] = useState<string | null>(null);
+  const [identifying, setIdentifying] = useState(false);
+  const [suggestions, setSuggestions] = useState<PlantSuggestion[]>([]);
+  const [hasIdentification, setHasIdentification] = useState(false);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [identificationError, setIdentificationError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
+
+  useEffect(() => () => {
+    generationRef.current += 1;
+    requestRef.current?.abort();
+  }, []);
 
   const resetResults = () => {
-    setShowSampleResults(false);
-    setSelectedSample(null);
+    generationRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setIdentifying(false);
+    setSuggestions([]);
+    setHasIdentification(false);
+    setSelectedName(null);
+    setIdentificationError(null);
     setPhotoError(null);
   };
 
   const removePhoto = () => {
-    setImageUri(null);
     resetResults();
+    setImageUri(null);
+  };
+
+  const runIdentification = async () => {
+    if (!imageUri || identifying || busy) return;
+    const generation = ++generationRef.current;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setIdentifying(true);
+    setSuggestions([]);
+    setSelectedName(null);
+    setHasIdentification(false);
+    setIdentificationError(null);
+    try {
+      const matches = await identifyPlant(imageUri, controller.signal);
+      if (generation !== generationRef.current) return;
+      setSuggestions(matches);
+      setHasIdentification(true);
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      setIdentificationError(error instanceof Error ? error.message : 'Could not identify this photo.');
+    } finally {
+      if (generation === generationRef.current) {
+        requestRef.current = null;
+        setIdentifying(false);
+      }
+    }
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    resetResults();
     setBusy(true);
     setPhotoError(null);
     try {
@@ -111,11 +147,11 @@ export default function IdentifyScreen() {
           </View>
           <Text style={styles.heroTitle}>Your pocket field expert</Text>
           <Text style={styles.heroBody}>
-            Point your camera at wildlife and get candidate matches with photos, habitat notes and
-            conservation status.
+            Photograph a plant, then tap Identify Plant to get possible species matches.
+            Animal identification is coming later.
           </Text>
           <Text style={styles.phaseBadge}>
-            Phase 3B.3: Results preview is available. Live mobile identification is not enabled yet.
+            Live plant identification is available. Please check suggestions before trusting a match.
           </Text>
         </View>
 
@@ -149,10 +185,11 @@ export default function IdentifyScreen() {
               contentFit="cover"
               accessibilityLabel="Selected photograph ready for identification"
             />
-            <Text style={styles.previewText}>Photo ready. The preview below uses a previous Dahlia API response; this photo has NOT been analyzed.</Text>
+            <Text style={styles.previewText}>Photo ready. Tap Identify Plant to upload it securely for analysis.</Text>
             <PrimaryButton
-              label={showSampleResults ? 'Hide sample results' : 'Preview identification results (sample)'}
-              onPress={() => { setShowSampleResults((value) => !value); setSelectedSample(null); }}
+              label="Identify Plant"
+              loading={identifying}
+              onPress={() => { void runIdentification(); }}
             />
             <PrimaryButton label="Remove photo" variant="ghost" onPress={removePhoto} />
           </View>
@@ -160,12 +197,14 @@ export default function IdentifyScreen() {
 
         {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
 
-        {imageUri && showSampleResults ? (
+        {imageUri && (identifying || identificationError || hasIdentification) ? (
           <PlantIdentificationResults
-            suggestions={SAMPLE_RESULTS}
-            selectedName={selectedSample}
-            onSelect={(suggestion) => setSelectedSample(suggestion.scientificName)}
-            demo
+            suggestions={suggestions}
+            loading={identifying}
+            error={identificationError}
+            onRetry={() => { void runIdentification(); }}
+            selectedName={selectedName}
+            onSelect={(suggestion) => setSelectedName(suggestion.scientificName)}
           />
         ) : null}
 
@@ -173,9 +212,9 @@ export default function IdentifyScreen() {
         <View style={styles.permissionCard}>
           <Ionicons name="lock-closed-outline" size={20} color={Colors.forestGreen} />
           <Text style={styles.permissionText}>
-            WildDex only uses your camera and photo library when you tap the buttons above. Photos stay
-            on your device until you choose to identify them, and permissions can be revoked anytime in
-            system settings.
+            WildDex accesses your camera or gallery only when you choose. Your photo stays on your device
+            until you tap Identify Plant; then it is sent to the WildDex backend and Pl@ntNet for analysis.
+            Camera permissions can be revoked in system settings.
           </Text>
         </View>
         {permissionDenied ? (

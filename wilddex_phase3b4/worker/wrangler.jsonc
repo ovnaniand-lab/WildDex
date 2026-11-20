@@ -1,0 +1,9 @@
+{
+  "name": "wilddex-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-17",
+  "ratelimits": [
+    { "name": "GUEST_LIMIT", "namespace_id": "203401", "simple": { "limit": 3, "period": 60 } },
+    { "name": "TRAFFIC_LIMIT", "namespace_id": "203402", "simple": { "limit": 12, "period": 60 } }
+  ]
+}
