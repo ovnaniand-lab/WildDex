@@ -1,18 +1,17 @@
 /**
- * Identify Screen — introduces camera-based identification.
- *
- * ⚠️ Phase 1: no AI recognition is implemented and no backend is connected.
- * The buttons below pick/launch a real image source via expo-image-picker so
- * the UX flow is genuine; in Phase 2 the chosen image will be uploaded to the
- * WildDex identification service.
+ * Identify Screen — camera/gallery and live Pl@ntNet plant identification.
+ * Photos are uploaded only after the user taps Identify Plant.
  */
 import EmptyState from '@/components/EmptyState';
 import PrimaryButton from '@/components/PrimaryButton';
+import PlantIdentificationResults, { type PlantSuggestion } from '@/components/PlantIdentificationResults';
 import { CardShadow, Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { identifyPlant } from '@/src/api/plantIdentification';
+import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,16 +25,81 @@ const STEPS: Step[] = [
   { icon: 'flash-outline', title: 'Get close, get light', body: 'Fill the frame with the animal or plant and use natural daylight where possible.' },
   { icon: 'albums-outline', title: 'Capture one subject', body: 'Clear photos of a single species identify best — avoid busy backgrounds.' },
   { icon: 'leaf-outline', title: 'Add context', body: 'Note habitat (forest floor, pond, sky) — it helps narrow candidates.' },
-  { icon: 'bookmark-outline', title: 'Save your discovery', body: 'Confirm the match and it lands in your regional collection automatically.' },
+  { icon: 'bookmark-outline', title: 'Review your match', body: 'Check the suggested species carefully. Saving discoveries will be added next.' },
 ];
 
 export default function IdentifyScreen() {
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const { recoveredPhoto } = useLocalSearchParams<{
+    recoveredPhoto?: string;
+  }>();
+
+  const [imageUri, setImageUri] = useState<string | null>(
+    recoveredPhoto ?? null
+  );
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
+  const [suggestions, setSuggestions] = useState<PlantSuggestion[]>([]);
+  const [hasIdentification, setHasIdentification] = useState(false);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [identificationError, setIdentificationError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
+
+  useEffect(() => () => {
+    generationRef.current += 1;
+    requestRef.current?.abort();
+  }, []);
+
+  const resetResults = () => {
+    generationRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setIdentifying(false);
+    setSuggestions([]);
+    setHasIdentification(false);
+    setSelectedName(null);
+    setIdentificationError(null);
+    setPhotoError(null);
+  };
+
+  const removePhoto = () => {
+    resetResults();
+    setImageUri(null);
+  };
+
+  const runIdentification = async () => {
+    if (!imageUri || identifying || busy) return;
+    const generation = ++generationRef.current;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setIdentifying(true);
+    setSuggestions([]);
+    setSelectedName(null);
+    setHasIdentification(false);
+    setIdentificationError(null);
+    try {
+      const matches = await identifyPlant(imageUri, controller.signal);
+      if (generation !== generationRef.current) return;
+      setSuggestions(matches);
+      setHasIdentification(true);
+    } catch (error) {
+      if (generation !== generationRef.current) return;
+      setIdentificationError(error instanceof Error ? error.message : 'Could not identify this photo.');
+    } finally {
+      if (generation === generationRef.current) {
+        requestRef.current = null;
+        setIdentifying(false);
+      }
+    }
+  };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    resetResults();
     setBusy(true);
+    setPhotoError(null);
     try {
       if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -44,7 +108,10 @@ export default function IdentifyScreen() {
           return;
         }
         const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-        if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+        if (!result.canceled && result.assets[0]) {
+          resetResults();
+          setImageUri(result.assets[0].uri);
+        }
       } else {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
@@ -52,11 +119,14 @@ export default function IdentifyScreen() {
           allowsEditing: true,
           aspect: [4, 3],
         });
-        if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+        if (!result.canceled && result.assets[0]) {
+          resetResults();
+          setImageUri(result.assets[0].uri);
+        }
       }
       setPermissionDenied(false);
     } catch {
-      setPermissionDenied(false);
+      setPhotoError('Could not open the photo source. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -77,11 +147,11 @@ export default function IdentifyScreen() {
           </View>
           <Text style={styles.heroTitle}>Your pocket field expert</Text>
           <Text style={styles.heroBody}>
-            Point your camera at wildlife and get candidate matches with photos, habitat notes and
-            conservation status.
+            Photograph a plant, then tap Identify Plant to get possible species matches.
+            Animal identification is coming later.
           </Text>
           <Text style={styles.phaseBadge}>
-            🚧 Identification service arrives in Phase 2 — this screen demonstrates the capture flow only.
+            Live plant identification is available. Please check suggestions before trusting a match.
           </Text>
         </View>
 
@@ -115,18 +185,36 @@ export default function IdentifyScreen() {
               contentFit="cover"
               accessibilityLabel="Selected photograph ready for identification"
             />
-            <Text style={styles.previewText}>Photo ready ✓ — matching will run once the Phase 2 service is connected.</Text>
-            <PrimaryButton label="Remove photo" variant="ghost" onPress={() => setImageUri(null)} />
+            <Text style={styles.previewText}>Photo ready. Tap Identify Plant to upload it securely for analysis.</Text>
+            <PrimaryButton
+              label="Identify Plant"
+              loading={identifying}
+              onPress={() => { void runIdentification(); }}
+            />
+            <PrimaryButton label="Remove photo" variant="ghost" onPress={removePhoto} />
           </View>
+        ) : null}
+
+        {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
+
+        {imageUri && (identifying || identificationError || hasIdentification) ? (
+          <PlantIdentificationResults
+            suggestions={suggestions}
+            loading={identifying}
+            error={identificationError}
+            onRetry={() => { void runIdentification(); }}
+            selectedName={selectedName}
+            onSelect={(suggestion) => setSelectedName(suggestion.scientificName)}
+          />
         ) : null}
 
         {/* Permission explanation */}
         <View style={styles.permissionCard}>
           <Ionicons name="lock-closed-outline" size={20} color={Colors.forestGreen} />
           <Text style={styles.permissionText}>
-            WildDex only uses your camera and photo library when you tap the buttons above. Photos stay
-            on your device until you choose to identify them, and permissions can be revoked anytime in
-            system settings.
+            WildDex accesses your camera or gallery only when you choose. Your photo stays on your device
+            until you tap Identify Plant; then it is sent to the WildDex backend and Pl@ntNet for analysis.
+            Camera permissions can be revoked in system settings.
           </Text>
         </View>
         {permissionDenied ? (
@@ -196,6 +284,7 @@ const styles = StyleSheet.create({
   previewCard: { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: Spacing.sm, gap: Spacing.sm },
   previewImage: { width: '100%', height: 220, borderRadius: Radius.md, backgroundColor: Colors.leafTint },
   previewText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
+  errorText: { color: '#A12B2B', fontSize: 13, fontWeight: '600' },
   permissionCard: {
     flexDirection: 'row',
     gap: Spacing.sm,
