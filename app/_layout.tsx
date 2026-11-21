@@ -13,6 +13,13 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: Colors.warmCream },
         }}
       >
+        <Stack.Screen
+  name="discovery/[id]"
+  options={{
+    animation: 'slide_from_right',
+    contentStyle: { backgroundColor: Colors.warmCream },
+  }}
+/>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
   name="species/live"

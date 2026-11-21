@@ -34,6 +34,7 @@ export default function HomeScreen() {
     selectedCountryCode,
     gpsPoint,
     radiusKm,
+    profile,
   } = useWildDex();
 
   // Phase-2 live region context (manual country or one-shot GPS nearby mode).
@@ -77,7 +78,9 @@ export default function HomeScreen() {
             </View>
             <View>
               <Text style={styles.logoText}>WildDex</Text>
-              <Text style={styles.greeting}>Good day, explorer 👋</Text>
+              <Text style={styles.greeting}>
+  Good day, {profile.nickname.trim() || 'explorer'} 👋
+</Text>
             </View>
           </View>
           <Link href="/(tabs)/collections" asChild>
