@@ -242,9 +242,6 @@ export default function HomeScreen() {
           accessibilityLabel="Explore nature species"
         />
 
-        <Text style={styles.previewNote}>
-          Phase 1 preview data — live species services arrive in Phase 2.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
