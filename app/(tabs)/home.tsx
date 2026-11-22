@@ -91,16 +91,56 @@ export default function HomeScreen() {
           </Link>
         </View>
 
-        {/* Current region card */}
+                {/* Featured region card */}
         <View style={[styles.regionCard, CardShadow]}>
+          <View style={styles.regionCardHeader}>
+            <Text style={styles.overline}>YOUR NATURE REGION</Text>
+            <View style={styles.regionIcon}>
+              <Ionicons
+                name="compass-outline"
+                size={24}
+                color={Colors.goldenAmber}
+              />
+            </View>
+          </View>
+
           <View style={styles.regionInfo}>
-            <Text style={styles.overline}>Your adventure region</Text>
             <Text style={styles.regionName}>
               {region?.emoji ?? '🌍'} {region?.name ?? 'Unknown region'}
             </Text>
-            <Text style={styles.regionBlurb}>{region?.blurb}</Text>
+
+            <Text style={styles.regionBlurb}>
+              {region?.blurb ??
+                'Discover the wildlife and biodiversity of your region.'}
+            </Text>
           </View>
-          <PrimaryButton label="Change Region" onPress={() => router.push('/location')} />
+
+          <View style={styles.regionProgress}>
+            <View style={styles.regionProgressHeader}>
+              <Text style={styles.regionProgressLabel}>
+                Regional collection
+              </Text>
+
+              <Text style={styles.regionProgressValue}>
+                {regionProgress} / {regionSpecies.length}
+              </Text>
+            </View>
+
+            <ProgressBar
+              progress={
+                regionSpecies.length > 0
+                  ? regionProgress / regionSpecies.length
+                  : 0
+              }
+              color={Colors.goldenAmber}
+              height={7}
+            />
+          </View>
+
+          <PrimaryButton
+            label="Change Region"
+            onPress={() => router.push('/location')}
+          />
         </View>
 
         {/* Discovery statistics */}
@@ -273,16 +313,61 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   dexChipText: { fontWeight: '800', color: Colors.forestGreen },
-  regionCard: {
+    regionCard: {
     backgroundColor: Colors.deepForest,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    gap: Spacing.md,
+    borderRadius: 24,
+    padding: Spacing.lg,
+    gap: Spacing.lg,
   },
-  regionInfo: { gap: 4 },
-  overline: { ...Typography.overline, color: Colors.goldenAmber },
-  regionName: { fontSize: 20, fontWeight: '800', color: Colors.textOnDark },
-  regionBlurb: { fontSize: 13, color: Colors.textOnDarkSecondary },
+  regionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  regionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  regionInfo: {
+    gap: Spacing.xs,
+  },
+  overline: {
+    ...Typography.overline,
+    color: Colors.goldenAmber,
+    letterSpacing: 1.2,
+  },
+  regionName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: Colors.textOnDark,
+  },
+  regionBlurb: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: Colors.textOnDarkSecondary,
+  },
+  regionProgress: {
+    gap: Spacing.sm,
+  },
+  regionProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  regionProgressLabel: {
+    fontSize: 12,
+    color: Colors.textOnDarkSecondary,
+    fontWeight: '600',
+  },
+  regionProgressValue: {
+    fontSize: 13,
+    color: Colors.textOnDark,
+    fontWeight: '800',
+  },
   statsRow: { flexDirection: 'row', gap: Spacing.sm },
   statCard: {
     flex: 1,

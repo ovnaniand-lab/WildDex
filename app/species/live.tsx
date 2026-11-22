@@ -48,7 +48,14 @@ export default function LiveSpeciesProfileScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { hasDiscovery, saveDiscovery, regionMode, selectedCountryCode, gpsPoint, radiusKm } = useWildDex();
+  const {
+  hasDiscovery,
+  saveDiscoveryRecord,
+  regionMode,
+  selectedCountryCode,
+  gpsPoint,
+  radiusKm,
+} = useWildDex();
 
   const region: RegionContext | undefined =
     regionMode === 'gps' && gpsPoint
@@ -276,8 +283,16 @@ export default function LiveSpeciesProfileScreen() {
           <PrimaryButton
             label={saved ? '✓ Saved to your collections' : '💾 Save Discovery'}
             onPress={() => {
-              if (!saved) void saveDiscovery(species.uid);
-            }}
+              if (!saved) {
+    void saveDiscoveryRecord({
+      speciesId: species.uid,
+      scientificName: species.scientificName,
+      commonName: species.commonName,
+      source: 'encyclopedia',
+      categoryId: species.categoryId,
+    });
+  }
+}}
             disabled={saved}
           />
         </View>
