@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -9,6 +9,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SPECIES } from '@/data/previewData';
+import { getSpeciesByUid } from '@/src/api/encyclopedia';
+import { calculateAchievementProgress } from '@/utils/achievements';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,13 +30,16 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const {
-    discoveries,
-    discoveryRecords,
-    selectedRegionId,
-    profile,
-    updateProfile,
-    saveProfileAvatar,
-  } = useWildDex();
+  discoveries,
+  discoveryRecords,
+  discoveryCategories,
+  saveDiscoveryCategory,
+  hydrated,
+  selectedRegionId,
+  profile,
+  updateProfile,
+  saveProfileAvatar,
+} = useWildDex();
 
   const region = repository.getRegionById(selectedRegionId);
 
@@ -50,11 +56,107 @@ export default function ProfileScreen() {
     setNickname(profile.nickname);
   }, [profile.nickname]);
 
-  const unlockedCount = (achievementsState.data ?? []).filter(
-    (achievement) => achievement.unlocked,
-  ).length;
+  const achievementProgress = calculateAchievementProgress(
+  achievementsState.data ?? [],
+  discoveries,
+  discoveryRecords,
+  discoveryCategories,
+);
 
-  const speciesCount = new Set(discoveries).size;
+const unlockedCount = achievementProgress.filter(
+  (achievement) => achievement.unlocked,
+).length;
+
+const speciesCount = new Set([
+  ...discoveries,
+  ...discoveryRecords.map((record) => record.speciesId),
+]).size;
+const nextAchievement = achievementProgress.find(
+  (achievement) => !achievement.unlocked,
+);
+
+const categoryRecoveryInFlight = useRef(new Set<string>());
+
+useEffect(() => {
+  if (!hydrated) return;
+
+  const recordsWithCategories = new Set(
+    discoveryRecords
+      .filter((record) => record.categoryId)
+      .map((record) => record.speciesId),
+  );
+
+  const missingCategories = [...new Set([
+    ...discoveries,
+    ...discoveryRecords.map((record) => record.speciesId),
+  ])].filter(
+    (id) =>
+      !discoveryCategories[id] &&
+      !recordsWithCategories.has(id) &&
+      !categoryRecoveryInFlight.current.has(id),
+  );
+
+  for (const id of missingCategories) {
+    const localSpecies = SPECIES.find((species) => species.id === id);
+
+    if (localSpecies) {
+      categoryRecoveryInFlight.current.add(id);
+
+      void saveDiscoveryCategory(id, localSpecies.categoryId)
+        .finally(() => categoryRecoveryInFlight.current.delete(id));
+
+      continue;
+    }
+
+    if (!id.startsWith('inat:') && !id.startsWith('gbif:')) {
+      continue;
+    }
+
+    categoryRecoveryInFlight.current.add(id);
+  }
+
+  const remoteIds = missingCategories.filter(
+    (id) => id.startsWith('inat:') || id.startsWith('gbif:'),
+  );
+
+  let cancelled = false;
+
+  const recoverRemoteCategories = async () => {
+    const concurrency = 3;
+
+    for (let index = 0; index < remoteIds.length; index += concurrency) {
+      const batch = remoteIds.slice(index, index + concurrency);
+
+      await Promise.all(
+        batch.map(async (id) => {
+          try {
+            const species = await getSpeciesByUid(id);
+
+            if (!cancelled && species) {
+              await saveDiscoveryCategory(id, species.categoryId);
+            }
+          } catch {
+            // Leave the category unknown; a later visit can retry.
+          } finally {
+            categoryRecoveryInFlight.current.delete(id);
+          }
+        }),
+      );
+    }
+  };
+
+  void recoverRemoteCategories();
+
+  return () => {
+    cancelled = true;
+  };
+}, [
+  hydrated,
+  discoveries,
+  discoveryRecords,
+  discoveryCategories,
+  saveDiscoveryCategory,
+]);
 
   const handleSaveNickname = async () => {
     const cleanedName = nickname.trim();
@@ -228,40 +330,91 @@ export default function ProfileScreen() {
           {discoveryRecords.length} detailed saved species
         </Text>
 
-        {/* Achievements */}
+                {/* Achievements */}
         <Text style={styles.sectionTitle}>Achievements</Text>
 
         {achievementsState.loading ? (
           <LoadingState message="Checking your badges..." />
         ) : (
           <View style={styles.achievementGrid}>
-            {(achievementsState.data ?? []).map((achievement) => (
-              <View
-                key={achievement.id}
-                style={[
-                  styles.achievementCard,
-                  CardShadow,
-                  !achievement.unlocked && styles.locked,
-                ]}
-                accessibilityLabel={`${achievement.title}, ${
-                  achievement.unlocked ? 'unlocked' : 'locked'
-                }`}
-              >
-                <Text style={styles.achievementEmoji}>
-                  {achievement.unlocked ? achievement.emoji : '🔒'}
-                </Text>
+            {achievementProgress.map((achievement) => {
+              const unit =
+                achievement.id === 'forest-friend'
+                  ? 'mammals'
+                  : achievement.id === 'mycelium-hunter'
+                    ? 'fungi'
+                    : 'species';
 
-                <Text style={styles.achievementTitle} numberOfLines={1}>
-                  {achievement.title}
-                </Text>
+              return (
+                <View
+                  key={achievement.id}
+                  style={[
+                    styles.achievementCard,
+                    CardShadow,
+                    !achievement.unlocked && styles.locked,
+                  ]}
+                  accessibilityLabel={`${achievement.title}, ${
+                    achievement.unlocked ? 'unlocked' : 'locked'
+                  }, ${achievement.progress} of ${achievement.goal} ${unit}`}
+                >
+                  <Text style={styles.achievementEmoji}>
+                    {achievement.unlocked ? achievement.emoji : '🔒'}
+                  </Text>
 
-                <Text style={styles.achievementDesc} numberOfLines={2}>
-                  {achievement.description}
-                </Text>
-              </View>
-            ))}
+                  <Text style={styles.achievementTitle} numberOfLines={1}>
+                    {achievement.title}
+                  </Text>
+
+                  <Text style={styles.achievementDesc} numberOfLines={2}>
+                    {achievement.description}
+                  </Text>
+
+                  <Text style={styles.achievementDesc}>
+                    {achievement.progress} / {achievement.goal} {unit}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
+
+        {/* Next milestone */}
+        <View style={[styles.milestoneCard, CardShadow]}>
+          {nextAchievement ? (
+            <>
+              <Text style={styles.milestoneTitle}>
+                Next badge: {nextAchievement.title}
+              </Text>
+
+              <ProgressBar
+                progress={Math.min(
+                  nextAchievement.progress / nextAchievement.goal,
+                  1,
+                )}
+                accessibleLabel={`${nextAchievement.progress} of ${nextAchievement.goal} toward ${nextAchievement.title}`}
+              />
+
+              <Text style={styles.milestoneNote}>
+                {nextAchievement.goal - nextAchievement.progress} more{' '}
+                {nextAchievement.id === 'forest-friend'
+                  ? 'mammals'
+                  : nextAchievement.id === 'mycelium-hunter'
+                    ? 'fungi'
+                    : 'species'}{' '}
+                to earn it.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.milestoneTitle}>
+                All badges earned!
+              </Text>
+              <Text style={styles.milestoneNote}>
+                Congratulations! You have unlocked every achievement.
+              </Text>
+            </>
+          )}
+        </View>
 
         {/* Next milestone */}
         <View style={[styles.milestoneCard, CardShadow]}>

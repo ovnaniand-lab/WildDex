@@ -16,6 +16,7 @@ import {
   useState,
 } from 'react';
 
+const DISCOVERY_CATEGORIES_KEY = 'wilddex.discoveryCategories';
 const REGION_KEY = 'wilddex.selectedRegionId';
 const DISCOVERIES_KEY = 'wilddex.discoveries';
 const DISCOVERY_RECORDS_KEY = 'wilddex.discoveryRecords';
@@ -66,6 +67,11 @@ export interface SaveDiscoveryRecordInput {
 }
 
 interface WildDexState {
+  discoveryCategories: Record<string, string>;
+saveDiscoveryCategory: (
+  speciesId: string,
+  categoryId: string,
+) => Promise<void>;
   profile: PersonalProfile;
   updateProfile: (updates: Partial<PersonalProfile>) => Promise<void>;
   saveProfileAvatar: (sourceUri: string) => Promise<void>;
@@ -95,7 +101,20 @@ interface WildDexState {
 const WildDexContext = createContext<WildDexState | null>(null);
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+  return Array.isArray(value) && value.every(
+    (item) => typeof item === 'string',
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (item) => typeof item === 'string',
+    )
+  );
 }
 
 function isDiscoveryRecordArray(value: unknown): value is DiscoveryRecord[] {
@@ -145,6 +164,10 @@ async function copyDiscoveryPhoto(
 }
 
 export function WildDexProvider({ children }: { children: ReactNode }) {
+  const [discoveryCategories, setDiscoveryCategories] =
+  useState<Record<string, string>>({});
+
+const categoriesRef = useRef<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
   const [onboarded, setOnboarded] = useState(true);
   const [selectedRegionId, setSelectedRegionId] = useState(DEFAULT_REGION_ID);
@@ -162,8 +185,18 @@ export function WildDexProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [region, disc, records, ob, country, gps, radius, savedProfile] =
-  await Promise.all([
+        const [
+  region,
+  disc,
+  records,
+  categories,
+  ob,
+  country,
+  gps,
+  radius,
+  savedProfile,
+] = await Promise.all([
+    AsyncStorage.getItem(DISCOVERY_CATEGORIES_KEY),
     AsyncStorage.getItem(REGION_KEY),
     AsyncStorage.getItem(DISCOVERIES_KEY),
     AsyncStorage.getItem(DISCOVERY_RECORDS_KEY),
@@ -191,7 +224,14 @@ export function WildDexProvider({ children }: { children: ReactNode }) {
             setDiscoveryRecords(parsed);
           }
         }
+        if (categories) {
+          const parsed: unknown = JSON.parse(categories);
 
+           if (isStringRecord(parsed)) {
+           categoriesRef.current = parsed;
+           setDiscoveryCategories(parsed);
+      }
+       }
         setOnboarded(ob === 'true');
 
         if (country) setSelectedCountryCode(country);
@@ -297,7 +337,23 @@ const saveProfileAvatar = useCallback(
     setDiscoveries(next);
     return true;
   }, []);
+const saveDiscoveryCategory = useCallback(
+  async (speciesId: string, categoryId: string) => {
+    const next = {
+      ...categoriesRef.current,
+      [speciesId]: categoryId,
+    };
 
+    await AsyncStorage.setItem(
+      DISCOVERY_CATEGORIES_KEY,
+      JSON.stringify(next),
+    );
+
+    categoriesRef.current = next;
+    setDiscoveryCategories(next);
+  },
+  [],
+);
   // Saves a detailed record, updating the existing record for the same species.
   const saveDiscoveryRecord = useCallback(
     async (input: SaveDiscoveryRecordInput): Promise<DiscoveryRecord> => {
@@ -339,15 +395,26 @@ const saveProfileAvatar = useCallback(
           ? currentDiscoveries
           : [...currentDiscoveries, input.speciesId];
 
-        await AsyncStorage.multiSet([
-          [DISCOVERY_RECORDS_KEY, JSON.stringify(nextRecords)],
-          [DISCOVERIES_KEY, JSON.stringify(nextDiscoveries)],
-        ]);
+        const nextCategories = input.categoryId
+  ? {
+      ...categoriesRef.current,
+      [input.speciesId]: input.categoryId,
+    }
+  : categoriesRef.current;
+
+await AsyncStorage.multiSet([
+  [DISCOVERY_RECORDS_KEY, JSON.stringify(nextRecords)],
+  [DISCOVERIES_KEY, JSON.stringify(nextDiscoveries)],
+  [DISCOVERY_CATEGORIES_KEY, JSON.stringify(nextCategories)],
+]);
 
         recordsRef.current = nextRecords;
-        discoveriesRef.current = nextDiscoveries;
-        setDiscoveryRecords(nextRecords);
-        setDiscoveries(nextDiscoveries);
+discoveriesRef.current = nextDiscoveries;
+categoriesRef.current = nextCategories;
+
+setDiscoveryRecords(nextRecords);
+setDiscoveries(nextDiscoveries);
+setDiscoveryCategories(nextCategories);
 
         // Remove the previous app-managed photo only after the new record
         // has been saved successfully.
@@ -423,56 +490,60 @@ const saveProfileAvatar = useCallback(
 
   const regionMode: 'gps' | 'manual' = gpsPoint ? 'gps' : 'manual';
 
-  const value = useMemo<WildDexState>(
-    () => ({
-      profile,
-      updateProfile,
-      saveProfileAvatar,
-      hydrated,
-      onboarded,
-      selectedRegionId,
-      discoveries,
-      discoveryRecords,
-      setRegion,
-      saveDiscovery,
-      saveDiscoveryRecord,
-      hasDiscovery,
-      completeOnboarding,
-      regionMode,
-      selectedCountryCode,
-      gpsPoint,
-      radiusKm,
-      setSelectedCountry,
-      setGpsPoint,
-      clearGpsPoint,
-      setRadiusKm,
-    }),
-    [
-      profile,
-      updateProfile,
-      saveProfileAvatar,
-      hydrated,
-      onboarded,
-      selectedRegionId,
-      discoveries,
-      discoveryRecords,
-      setRegion,
-      saveDiscovery,
-      saveDiscoveryRecord,
-      hasDiscovery,
-      completeOnboarding,
-      regionMode,
-      selectedCountryCode,
-      gpsPoint,
-      radiusKm,
-      setSelectedCountry,
-      setGpsPoint,
-      clearGpsPoint,
-      setRadiusKm,
-    ],
-  );
+ const value = useMemo<WildDexState>(
+  () => ({
+    profile,
+    updateProfile,
+    saveProfileAvatar,
+    hydrated,
+    onboarded,
+    selectedRegionId,
+    discoveries,
+    discoveryRecords,
+    discoveryCategories,
+    saveDiscoveryCategory,
+    setRegion,
+    saveDiscovery,
+    saveDiscoveryRecord,
+    hasDiscovery,
+    completeOnboarding,
+    regionMode,
+    selectedCountryCode,
+    gpsPoint,
+    radiusKm,
+    setSelectedCountry,
+    setGpsPoint,
+    clearGpsPoint,
+    setRadiusKm,
+  }),
+  [
+    profile,
+    updateProfile,
+    saveProfileAvatar,
+    hydrated,
+    onboarded,
+    selectedRegionId,
+    discoveries,
+    discoveryRecords,
+    discoveryCategories,
+    saveDiscoveryCategory,
+    setRegion,
+    saveDiscovery,
+    saveDiscoveryRecord,
+    hasDiscovery,
+    completeOnboarding,
+    regionMode,
+    selectedCountryCode,
+    gpsPoint,
+    radiusKm,
+    setSelectedCountry,
+    setGpsPoint,
+    clearGpsPoint,
+    setRadiusKm,
+  ],
+);
 
-  return (
+return (
   <WildDexContext.Provider value={value}>
     {children}
   </WildDexContext.Provider>

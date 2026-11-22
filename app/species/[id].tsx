@@ -23,7 +23,7 @@ import { useState } from 'react';
 export default function SpeciesDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { hasDiscovery, saveDiscovery, selectedRegionId } = useWildDex();
+  const { hasDiscovery, saveDiscoveryRecord, selectedRegionId } = useWildDex();
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -66,15 +66,24 @@ export default function SpeciesDetailScreen() {
   const inMyRegion = species.regionIds.includes(selectedRegionId);
 
   const onSave = async () => {
-    if (saved) return;
-    setSaving(true);
-    try {
-      await saveDiscovery(species.id);
-      setJustSaved(true);
-    } finally {
-      setSaving(false);
-    }
-  };
+  if (saved) return;
+
+  setSaving(true);
+
+  try {
+    await saveDiscoveryRecord({
+      speciesId: species.id,
+      scientificName: species.scientificName,
+      commonName: species.commonName,
+      source: 'encyclopedia',
+      categoryId: species.categoryId,
+    });
+
+    setJustSaved(true);
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
