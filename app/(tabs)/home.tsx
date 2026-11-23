@@ -3,6 +3,8 @@
  * shortcuts, discovery statistics and the active challenge preview.
  * All content comes from the Phase-1 preview repository.
  */
+import { countryByCode } from '@/src/api/countries';
+import { REGION_IMAGES } from '@/constants/regionImages';
 import CategoryCard from '@/components/CategoryCard';
 import EncyclopediaCard from '@/components/EncyclopediaCard';
 import LiveSpeciesRow, { fetchLiveRow } from '@/components/LiveSpeciesRow';
@@ -25,6 +27,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
+  const hour = new Date().getHours();
+  const greeting = hour >= 18 || hour < 5 ? 'Good evening' : 'Good day';
   const router = useRouter();
   const {
     selectedRegionId,
@@ -55,6 +59,22 @@ export default function HomeScreen() {
   }, []);
 
   const region = repository.getRegionById(selectedRegionId);
+  const selectedCountry = countryByCode(selectedCountryCode);
+
+const regionName =
+  regionMode === 'gps' && gpsPoint
+    ? 'Your nearby area'
+    : regionMode === 'manual' && selectedCountry
+      ? selectedCountry.name
+      : region?.name ?? 'Unknown region';
+
+const regionDescription =
+  regionMode === 'gps' && gpsPoint
+    ? `Explore species recorded within ${radiusKm} km of your location.`
+    : regionMode === 'manual' && selectedCountry
+      ? `Explore the wildlife and biodiversity of ${selectedCountry.name}.`
+      : region?.blurb ?? 'Discover the wildlife and biodiversity of your region.';
+
   const categoriesState = useRepositoryData<SpeciesCategory[]>(() => repository.getCategories(), []);
   const featuredState = useRepositoryData<Species[]>(() => repository.getFeaturedSpecies(), []);
   const challengeState = useRepositoryData<Challenge>(() => repository.getChallenge(), []);
@@ -66,82 +86,99 @@ export default function HomeScreen() {
   const regionSpecies = regionSpeciesState.data ?? [];
   const discoveredCount = discoveries.length;
   const regionProgress = regionSpecies.length > 0 ? regionSpecies.filter((s) => hasDiscovery(s.id)).length : 0;
+  const imageRegionByContinent: Record<string, string> = {
+  Europe: 'western-europe',
+  'South America': 'amazon-basin',
+  Africa: 'east-african-savanna',
+  'North America': 'boreal-canada',
+  Asia: 'southeast-asia',
+  Oceania: 'australian-bush',
+};
+
+const imageRegionKey =
+  regionMode === 'manual' && selectedCountry
+    ? imageRegionByContinent[selectedCountry.continent]
+    : selectedRegionId;
+
+const regionImage =
+  REGION_IMAGES[imageRegionKey] ?? REGION_IMAGES['western-europe'];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header: logo + greeting */}
-        <View style={styles.headerRow}>
-          <View style={styles.logoRow}>
-            <View style={styles.logoMark}>
-              <Text style={styles.logoEmoji}>🦊</Text>
-            </View>
-            <View>
-              <Text style={styles.logoText}>WildDex</Text>
-              <Text style={styles.greeting}>
-  Good day, {profile.nickname.trim() || 'explorer'} 👋
-</Text>
-            </View>
-          </View>
-          <Link href="/(tabs)/collections" asChild>
-            <View style={styles.dexChip}>
-              <Ionicons name="book" size={16} color={Colors.forestGreen} />
-              <Text style={styles.dexChipText}>{discoveredCount}</Text>
-            </View>
-          </Link>
-        </View>
+        {/* Greeting header */}
+<View style={styles.headerRow}>
+  <Text style={styles.greeting}>
+    {greeting}, {profile.nickname.trim() || 'explorer'}
+  </Text>
 
-                {/* Featured region card */}
-        <View style={[styles.regionCard, CardShadow]}>
-          <View style={styles.regionCardHeader}>
-            <Text style={styles.overline}>YOUR NATURE REGION</Text>
-            <View style={styles.regionIcon}>
-              <Ionicons
-                name="compass-outline"
-                size={24}
-                color={Colors.goldenAmber}
-              />
-            </View>
-          </View>
+  <Link href="/(tabs)/collections" asChild>
+    <View style={styles.dexChip}>
+      <Ionicons name="book" size={25} color={Colors.forestGreen} />
+      <Text style={styles.dexChipText}>{discoveredCount}</Text>
+    </View>
+  </Link>
+</View>
 
-          <View style={styles.regionInfo}>
-            <Text style={styles.regionName}>
-              {region?.emoji ?? '🌍'} {region?.name ?? 'Unknown region'}
-            </Text>
+               {/* Featured region card */}
+<View style={[styles.regionCard, CardShadow]}>
+  <Image
+    source={{ uri: regionImage.uri }}
+    style={StyleSheet.absoluteFill}
+    contentFit="cover"
+    transition={400}
+  />
 
-            <Text style={styles.regionBlurb}>
-              {region?.blurb ??
-                'Discover the wildlife and biodiversity of your region.'}
-            </Text>
-          </View>
+  <View style={styles.regionCardOverlay} />
 
-          <View style={styles.regionProgress}>
-            <View style={styles.regionProgressHeader}>
-              <Text style={styles.regionProgressLabel}>
-                Regional collection
-              </Text>
+  <View style={styles.regionCardHeader}>
+    <Text style={styles.overline}>YOUR NATURE REGION</Text>
+    <View style={styles.regionIcon}>
+      <Ionicons
+        name="compass-outline"
+        size={24}
+        color={Colors.goldenAmber}
+      />
+    </View>
+  </View>
 
-              <Text style={styles.regionProgressValue}>
-                {regionProgress} / {regionSpecies.length}
-              </Text>
-            </View>
+  <View style={styles.regionInfo}>
+    <Text style={styles.regionName}>
+      {regionName}
+    </Text>
 
-            <ProgressBar
-              progress={
-                regionSpecies.length > 0
-                  ? regionProgress / regionSpecies.length
-                  : 0
-              }
-              color={Colors.goldenAmber}
-              height={7}
-            />
-          </View>
+    <Text style={styles.regionBlurb}>
+      {regionDescription}
+    </Text>
+  </View>
 
-          <PrimaryButton
-            label="Change Region"
-            onPress={() => router.push('/location')}
-          />
-        </View>
+  <View style={styles.regionProgress}>
+    <View style={styles.regionProgressHeader}>
+      <Text style={styles.regionProgressLabel}>
+        Regional collection
+      </Text>
+
+      <Text style={styles.regionProgressValue}>
+        {regionProgress} / {regionSpecies.length}
+      </Text>
+    </View>
+
+    <ProgressBar
+      progress={
+        regionSpecies.length > 0
+          ? regionProgress / regionSpecies.length
+          : 0
+      }
+      color={Colors.goldenAmber}
+      height={7}
+    />
+  </View>
+
+  <PrimaryButton
+    label="Change Region"
+    onPress={() => router.push('/location')}
+  />
+</View>
 
         {/* Discovery statistics */}
         <View style={styles.statsRow}>
@@ -302,7 +339,12 @@ const styles = StyleSheet.create({
   },
   logoEmoji: { fontSize: 24 },
   logoText: { fontSize: 22, fontWeight: '800', color: Colors.forestGreen },
-  greeting: { ...Typography.caption },
+  greeting: {
+    ...Typography.caption,
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 22,
+    color: '#173F32',
+  },
   dexChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,11 +356,19 @@ const styles = StyleSheet.create({
   },
   dexChipText: { fontWeight: '800', color: Colors.forestGreen },
     regionCard: {
-    backgroundColor: Colors.deepForest,
-    borderRadius: 24,
-    padding: Spacing.lg,
-    gap: Spacing.lg,
-  },
+  position: 'relative',
+  overflow: 'hidden',
+  backgroundColor: Colors.deepForest,
+  borderRadius: 24,
+  padding: Spacing.lg,
+  gap: Spacing.lg,
+  minHeight: 340,
+},
+
+regionCardOverlay: {
+  ...StyleSheet.absoluteFill,
+  backgroundColor: 'rgba(15, 35, 27, 0.68)',
+},
   regionCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

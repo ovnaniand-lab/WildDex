@@ -3,6 +3,7 @@
  * status, habitat, taxonomy, regional information and a Save Discovery action
  * that persists to local storage (Phase 1) / backend (Phase 2).
  */
+import { countryByCode } from '@/src/api/countries';
 import EmptyState from '@/components/EmptyState';
 import LoadingState from '@/components/LoadingState';
 import PrimaryButton from '@/components/PrimaryButton';
@@ -23,7 +24,18 @@ import { useState } from 'react';
 export default function SpeciesDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { hasDiscovery, saveDiscoveryRecord, selectedRegionId } = useWildDex();
+  const {
+  hasDiscovery,
+  saveDiscoveryRecord,
+  selectedRegionId,
+  selectedCountryCode,
+  regionMode,
+} = useWildDex();
+
+const selectedCountry =
+  regionMode === 'manual' && selectedCountryCode
+    ? countryByCode(selectedCountryCode)
+    : undefined;
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -77,6 +89,8 @@ export default function SpeciesDetailScreen() {
       commonName: species.commonName,
       source: 'encyclopedia',
       categoryId: species.categoryId,
+      countryCode: regionMode === 'manual' ? selectedCountryCode : undefined,
+      regionId: selectedRegionId,
     });
 
     setJustSaved(true);

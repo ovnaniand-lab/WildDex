@@ -2,6 +2,7 @@
  * Identify Screen — camera/gallery and live Pl@ntNet plant identification.
  * Photos are uploaded only after the user taps Identify Plant.
  */
+import { countryByCode } from '@/src/api/countries';
 import EmptyState from '@/components/EmptyState';
 import PrimaryButton from '@/components/PrimaryButton';
 import PlantIdentificationResults, { type PlantSuggestion } from '@/components/PlantIdentificationResults';
@@ -16,6 +17,15 @@ import { useEffect, useRef, useState } from 'react';
 import { identifyPlant } from '@/src/api/plantIdentification';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const REGION_BY_CONTINENT: Record<string, string> = {
+  Europe: 'western-europe',
+  'South America': 'amazon-basin',
+  Africa: 'east-african-savanna',
+  'North America': 'boreal-canada',
+  Asia: 'southeast-asia',
+  Oceania: 'australian-bush',
+};
 
 interface Step {
   icon: keyof typeof Ionicons.glyphMap;
@@ -38,7 +48,22 @@ function createPlantNetSpeciesId(scientificName: string): string {
   return `plantnet:${scientificName.trim().toLowerCase().replace(/\s+/g, '_')}`;
 }
 export default function IdentifyScreen() {
-  const { saveDiscoveryRecord, discoveryRecords } = useWildDex();
+  const {
+  saveDiscoveryRecord,
+  discoveryRecords,
+  selectedCountryCode,
+  selectedRegionId,
+  regionMode,
+} = useWildDex();
+
+const selectedCountry =
+  regionMode === 'manual' && selectedCountryCode
+    ? countryByCode(selectedCountryCode)
+    : undefined;
+
+const discoveryRegionId = selectedCountry
+  ? REGION_BY_CONTINENT[selectedCountry.continent]
+  : selectedRegionId;
 
 const [saving, setSaving] = useState(false);
 const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -139,6 +164,8 @@ const saveSelectedDiscovery = async (includeLocation: boolean) => {
       location,
       source: 'plantnet',
       categoryId: 'plants',
+      countryCode: regionMode === 'manual' ? selectedCountryCode : undefined,
+      regionId: discoveryRegionId,
     });
 
     setSaveMessage(
@@ -256,6 +283,8 @@ const saveSelectedDiscovery = async (includeLocation: boolean) => {
       location,
       source: 'plantnet',
       categoryId: 'plants',
+      countryCode: regionMode === 'manual' ? selectedCountryCode : undefined,
+      regionId: discoveryRegionId,
     });
 
     setSaveMessage(

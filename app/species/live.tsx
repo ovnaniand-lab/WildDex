@@ -24,6 +24,16 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimens
 
 import { getSpeciesByUid, recordSpeciesView, type SpeciesDetail } from '@/src/api/encyclopedia';
 import type { RegionContext } from '@/src/api/types';
+import { countryByCode } from '@/src/api/countries';
+
+const REGION_BY_CONTINENT: Record<string, string> = {
+  Europe: 'western-europe',
+  'South America': 'amazon-basin',
+  Africa: 'east-african-savanna',
+  'North America': 'boreal-canada',
+  Asia: 'southeast-asia',
+  Oceania: 'australian-bush',
+};
 
 // Semantic aliases so the profile matches the WildDex design system.
 const palette = {
@@ -53,9 +63,19 @@ export default function LiveSpeciesProfileScreen() {
   saveDiscoveryRecord,
   regionMode,
   selectedCountryCode,
+  selectedRegionId,
   gpsPoint,
   radiusKm,
 } = useWildDex();
+
+const selectedCountry =
+  regionMode === 'manual' && selectedCountryCode
+    ? countryByCode(selectedCountryCode)
+    : undefined;
+
+const discoveryRegionId = selectedCountry
+  ? REGION_BY_CONTINENT[selectedCountry.continent]
+  : selectedRegionId;
 
   const region: RegionContext | undefined =
     regionMode === 'gps' && gpsPoint
@@ -288,8 +308,10 @@ export default function LiveSpeciesProfileScreen() {
       speciesId: species.uid,
       scientificName: species.scientificName,
       commonName: species.commonName,
-      source: 'encyclopedia',
+       source: 'encyclopedia',
       categoryId: species.categoryId,
+      countryCode: regionMode === 'manual' ? selectedCountryCode : undefined,
+      regionId: discoveryRegionId,
     });
   }
 }}
