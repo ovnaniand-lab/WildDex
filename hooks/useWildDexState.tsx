@@ -39,6 +39,9 @@ export interface GpsPoint {
 }
 
 export interface DiscoveryRecord {
+  categoryId?: string;
+  countryCode?: string;
+  regionId?: string;
   id: string;
   speciesId: string;
   scientificName: string;
@@ -47,7 +50,6 @@ export interface DiscoveryRecord {
   date: string;
   location?: GpsPoint;
   source: 'plantnet' | 'encyclopedia';
-  categoryId?: string;
 }
 
 export interface PersonalProfile {
@@ -64,6 +66,8 @@ export interface SaveDiscoveryRecordInput {
   location?: GpsPoint;
   source: 'plantnet' | 'encyclopedia';
   categoryId?: string;
+  countryCode?: string;
+  regionId?: string;
 }
 
 interface WildDexState {
@@ -373,16 +377,18 @@ const saveDiscoveryCategory = useCallback(
         }
 
         const record: DiscoveryRecord = {
-          id: input.speciesId,
-          speciesId: input.speciesId,
-          scientificName: input.scientificName,
-          commonName: input.commonName ?? previous?.commonName ?? null,
-          photoUri: newPhotoUri ?? previous?.photoUri,
-          date: input.date ?? new Date().toISOString(),
-          location: input.location ?? previous?.location,
-          source: input.source,
-          categoryId: input.categoryId ?? previous?.categoryId,
-        };
+  id: input.speciesId,
+  speciesId: input.speciesId,
+  scientificName: input.scientificName,
+  commonName: input.commonName ?? previous?.commonName ?? null,
+  photoUri: newPhotoUri ?? previous?.photoUri,
+  date: input.date ?? new Date().toISOString(),
+  location: input.location ?? previous?.location,
+  source: input.source,
+  categoryId: input.categoryId ?? previous?.categoryId,
+  countryCode: input.countryCode ?? previous?.countryCode,
+  regionId: input.regionId ?? previous?.regionId,
+};
 
         const nextRecords = previous
           ? previousRecords.map((item) =>

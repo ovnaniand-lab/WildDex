@@ -39,9 +39,9 @@ export default function CollectionCard({
             {title}
           </Text>
           {subtitle ? (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
+            <Text style={styles.subtitle} numberOfLines={2}>
+  {subtitle}
+</Text>
           ) : null}
         </View>
         <Text style={styles.ratio}>

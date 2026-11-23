@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { countryByCode } from '@/src/api/countries';
 import { SPECIES } from '@/data/previewData';
 import { getSpeciesByUid } from '@/src/api/encyclopedia';
 import { calculateAchievementProgress } from '@/utils/achievements';
@@ -30,6 +31,9 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const {
+  regionMode,
+  selectedCountryCode,
+  gpsPoint,
   discoveries,
   discoveryRecords,
   discoveryCategories,
@@ -42,6 +46,12 @@ export default function ProfileScreen() {
 } = useWildDex();
 
   const region = repository.getRegionById(selectedRegionId);
+  const selectedCountry = countryByCode(selectedCountryCode);
+
+const displayedRegion =
+  regionMode === 'gps' && gpsPoint
+    ? 'Nearby area'
+    : selectedCountry?.name ?? region?.name ?? 'No region selected';
 
   const achievementsState = useRepositoryData<Achievement[]>(
     () => repository.getAchievements(),
@@ -295,7 +305,7 @@ useEffect(() => {
                 </Text>
                 <Text style={styles.regionNote}>
                   <Ionicons name="location-outline" size={13} />
-                  {' '}{region?.name ?? 'No region selected'}
+                  {' '}{displayedRegion}
                 </Text>
               </>
             )}

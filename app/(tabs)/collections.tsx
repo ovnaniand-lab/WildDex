@@ -15,11 +15,12 @@ export default function CollectionsScreen() {
   const router = useRouter();
 
   const {
-    selectedRegionId,
-    discoveries,
-    discoveryRecords,
-    hasDiscovery,
-  } = useWildDex();
+  selectedRegionId,
+  discoveries,
+  discoveryRecords,
+  discoveryCategories,
+  hasDiscovery,
+} = useWildDex();
 
   const regionsState = useRepositoryData<Region[]>(() => repository.getRegions(), []);
   const categoriesState = useRepositoryData<SpeciesCategory[]>(() => repository.getCategories(), []);
@@ -27,17 +28,55 @@ export default function CollectionsScreen() {
 
   const allSpecies = allSpeciesState.data ?? [];
 
-  const regionStats = (regionId: string) => {
-    const inRegion = allSpecies.filter((s) => s.regionIds.includes(regionId));
-    const found = inRegion.filter((s) => hasDiscovery(s.id)).length;
-    return { total: Math.max(inRegion.length, 6), found };
+    const regionStats = (regionId: string) => {
+    const inRegion = allSpecies.filter((species) =>
+      species.regionIds.includes(regionId),
+    );
+
+    const foundIds = new Set(
+      inRegion
+        .filter((species) => hasDiscovery(species.id))
+        .map((species) => species.id),
+    );
+
+    discoveryRecords
+      .filter((record) => record.regionId === regionId)
+      .forEach((record) => foundIds.add(record.speciesId));
+
+    return {
+      total: Math.max(inRegion.length, 6, foundIds.size),
+      found: foundIds.size,
+    };
   };
 
   const categoryStats = (categoryId: string) => {
-    const inCat = allSpecies.filter((s) => s.categoryId === categoryId);
-    const found = inCat.filter((s) => hasDiscovery(s.id)).length;
-    return { total: Math.max(inCat.length, 5), found };
+  const speciesIds = new Set([
+    ...discoveries,
+    ...discoveryRecords.map((record) => record.speciesId),
+  ]);
+
+  const found = [...speciesIds].filter((speciesId) => {
+    const record = discoveryRecords.find(
+      (item) => item.speciesId === speciesId,
+    );
+
+    const savedCategory =
+      record?.categoryId ??
+      discoveryCategories[speciesId] ??
+      allSpecies.find((species) => species.id === speciesId)?.categoryId;
+
+    return savedCategory === categoryId;
+  }).length;
+
+  const catalogueTotal = allSpecies.filter(
+    (species) => species.categoryId === categoryId,
+  ).length;
+
+  return {
+    total: Math.max(catalogueTotal, 5, found),
+    found,
   };
+};
 
   const loading =
     regionsState.loading ||
@@ -74,76 +113,34 @@ export default function CollectionsScreen() {
               <Text style={styles.summaryLabel}>Categories unlocked</Text>
             </View>
 
-            {/* Saved discoveries */}
-            <View style={styles.discoveriesHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>My Discoveries</Text>
-                <Text style={styles.discoverySubtitle}>
-                  Your personal field journal
-                </Text>
-              </View>
+            {/* My Discoveries navigation card */}
+<Pressable
+  style={({ pressed }) => [
+    styles.myDiscoveriesCard,
+    CardShadow,
+    pressed && styles.pressed,
+  ]}
+  onPress={() => router.push('/discoveries')}
+  accessibilityRole="button"
+  accessibilityLabel={`Open My Discoveries, ${discoveryRecords.length} saved species`}
+>
+  <View style={styles.myDiscoveriesIcon}>
+    <Text style={styles.myDiscoveriesEmoji}>📖</Text>
+  </View>
 
-              <Text style={styles.discoveryCount}>
-                {discoveryRecords.length}
-              </Text>
-            </View>
+  <View style={styles.myDiscoveriesInfo}>
+    <Text style={styles.myDiscoveriesTitle}>My Discoveries</Text>
+    <Text style={styles.myDiscoveriesSubtitle}>
+      Your personal field journal
+    </Text>
+  </View>
 
-            {discoveryRecords.length === 0 ? (
-              <View style={styles.emptyDiscoveries}>
-                <Text style={styles.emptyEmoji}>🌿</Text>
-                <Text style={styles.emptyTitle}>Your field journal is empty</Text>
-                <Text style={styles.emptyText}>
-                  Identify a plant and save your first discovery to see it here.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.discoveryGrid}>
-                {discoveryRecords.map((record) => (
-                  <Pressable
-                    key={record.speciesId}
-                    style={({ pressed }) => [
-                      styles.discoveryCard,
-                      CardShadow,
-                      pressed && styles.pressed,
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/discovery/[id]',
-                        params: { id: record.speciesId },
-                      })
-                    }
-                    accessibilityRole="button"
-                    accessibilityLabel={`View discovery: ${record.commonName ?? record.scientificName}`}
-                  >
-                    {record.photoUri ? (
-                      <Image
-                        source={{ uri: record.photoUri }}
-                        style={styles.discoveryImage}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <Text style={styles.placeholderEmoji}>🌱</Text>
-                      </View>
-                    )}
+  <Text style={styles.myDiscoveriesCount}>
+    {discoveryRecords.length}
+  </Text>
 
-                    <View style={styles.discoveryInfo}>
-                      <Text style={styles.discoveryName} numberOfLines={1}>
-                        {record.commonName ?? record.scientificName}
-                      </Text>
-
-                      <Text style={styles.scientificName} numberOfLines={1}>
-                        {record.scientificName}
-                      </Text>
-
-                      <Text style={styles.discoveryDate}>
-                        {new Date(record.date).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-            )}
+  <Text style={styles.myDiscoveriesArrow}>›</Text>
+</Pressable>
 
             {/* Existing regional collections */}
             <Text style={styles.sectionTitle}>Regional collections</Text>
@@ -204,6 +201,51 @@ export default function CollectionsScreen() {
 }
 
 const styles = StyleSheet.create({
+  myDiscoveriesCard: {
+  backgroundColor: Colors.white,
+  borderRadius: Radius.lg,
+  padding: Spacing.md,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: Spacing.md,
+},
+
+myDiscoveriesIcon: {
+  width: 52,
+  height: 52,
+  borderRadius: Radius.md,
+  backgroundColor: Colors.leafTint,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+myDiscoveriesEmoji: {
+  fontSize: 25,
+},
+
+myDiscoveriesInfo: {
+  flex: 1,
+},
+
+myDiscoveriesTitle: {
+  ...Typography.subtitle,
+},
+
+myDiscoveriesSubtitle: {
+  ...Typography.caption,
+  marginTop: 3,
+},
+
+myDiscoveriesCount: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: Colors.forestGreen,
+},
+
+myDiscoveriesArrow: {
+  fontSize: 27,
+  color: Colors.textSecondary,
+},
   safe: {
     flex: 1,
     backgroundColor: Colors.warmCream,

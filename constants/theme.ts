@@ -1,30 +1,35 @@
+
 /**
- * WildDex centralised theme constants.
- * Nature Adventure palette — single source of truth for colours, spacing,
- * typography, radii and shadows. All screens/components must use these
- * instead of hard-coded values.
+ * WildDex Design System
+ * Modern Nature Explorer
+ *
+ * Central source of truth for colours, typography,
+ * spacing, radii and shadows.
  */
 
 export const Colors = {
-  forestGreen: '#234D36',
-  deepForest: '#173B2C',
-  leafGreen: '#6F9B65',
-  warmCream: '#F8F5EA',
-  earthBrown: '#8B6748',
-  goldenAmber: '#E9B65B',
+  // Brand palette
+  forestGreen: '#173F32',
+  deepForest: '#173F32',
+  leafGreen: '#78927B',
+  warmCream: '#F4F0E5',
+  earthBrown: '#B77B45',
+  goldenAmber: '#D9C9A5',
 
-  // Derived / semantic tones
-  leafTint: '#E7EFE3', // soft background tint derived from Leaf Green
-  amberTint: '#FBF0DA', // soft background tint derived from Golden Amber
-  brownTint: '#F1E7DC', // soft background tint derived from Earth Brown
-  textPrimary: '#173B2C',
-  textSecondary: '#5A6B5E',
-  textOnDark: '#F8F5EA',
-  textOnDarkSecondary: '#C9D6C4',
+  // Derived and semantic colours
+  leafTint: '#E6ECE4',
+  amberTint: '#F1E8D5',
+  brownTint: '#EFE5D9',
+
+  textPrimary: '#243B30',
+  textSecondary: '#68766B',
+  textOnDark: '#F4F0E5',
+  textOnDarkSecondary: '#C7D2C7',
+
   white: '#FFFFFF',
   danger: '#B4452F',
-  border: '#E3DFD1',
-  lockedOverlay: 'rgba(23, 59, 44, 0.55)',
+  border: '#E3DED1',
+  lockedOverlay: 'rgba(23, 63, 50, 0.58)',
 } as const;
 
 export const Spacing = {
@@ -43,34 +48,60 @@ export const Radius = {
   pill: 999,
 } as const;
 
+/**
+ * Editorial typography:
+ * Lora for prominent headings.
+ * DM Sans for interface text.
+ */
 export const Typography = {
-  display: { fontSize: 30, fontWeight: '800', color: Colors.textPrimary },
-  title: { fontSize: 22, fontWeight: '700', color: Colors.textPrimary },
-  subtitle: { fontSize: 17, fontWeight: '700', color: Colors.textPrimary },
-  body: { fontSize: 15, fontWeight: '400', color: Colors.textPrimary },
-  caption: { fontSize: 13, fontWeight: '500', color: Colors.textSecondary },
+  display: {
+    fontFamily: 'Lora_700Bold',
+    fontSize: 32,
+    color: Colors.textPrimary,
+  },
+  title: {
+    fontFamily: 'Lora_700Bold',
+    fontSize: 24,
+    color: Colors.textPrimary,
+  },
+  subtitle: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 17,
+    color: Colors.textPrimary,
+  },
+  body: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 15,
+    color: Colors.textPrimary,
+  },
+  caption: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
   overline: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
     color: Colors.leafGreen,
     textTransform: 'uppercase',
   },
 } as const;
 
-/** Plain, spreadable soft-shadow style (no exotic keys). */
+/** Subtle shadow for lightweight interface elements. */
 export const SoftShadow = {
   shadowColor: Colors.deepForest,
-  shadowOpacity: 0.08,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
   elevation: 2,
 } as const;
 
+/** Slightly stronger shadow for featured cards. */
 export const CardShadow = {
   shadowColor: Colors.deepForest,
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 4,
+  shadowOpacity: 0.10,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 3,
 } as const;
